@@ -2,18 +2,19 @@ cmake_minimum_required(VERSION 3.22.1)
 project(voiraig)
 find_package(Git QUIET)
 
-file(GLOB headers CONFIGURE_DEPENDS *.hpp)
-file(GLOB sources CONFIGURE_DEPENDS *.cpp)
+file(GLOB headers CONFIGURE_DEPENDS src/*.hpp)
+file(GLOB sources CONFIGURE_DEPENDS src/*.cpp)
 
 # Options:
-option(GIT_SUBMODULE "Automatically download dependencies" ON)
-option(LTO "Enable Link-Time Optimization" ON)
 option(LOG "Enable Logging" OFF)
+option(LTO "Enable Link-Time Optimization" ON)
+option(GIT "Automatically download dependencies" ON)
+option(CHECKER "Build Certificate Checker" ON)
+
+set(AIGER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/aiger CACHE PATH "aiger directory")
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-  set(LOG
-      ON
-      CACHE BOOL "Enable Logging" FORCE)
+  set(LOG ON CACHE BOOL "Enable Logging" FORCE)
 endif()
 
 # Compile flags:
@@ -28,57 +29,56 @@ if(LOG)
 endif(LOG)
 
 # Dependencies:
-if(GIT_SUBMODULE)
-  message(STATUS "Submodule update")
-  execute_process(
-    COMMAND ${GIT_EXECUTABLE} submodule update --init --recursive
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    RESULT_VARIABLE GIT_SUBMOD_RESULT)
-  if(NOT GIT_SUBMOD_RESULT EQUAL "0")
-    message(
-      FATAL_ERROR
-        "git submodule update --init --recursive failed with ${GIT_SUBMOD_RESULT}, please checkout submodules"
-    )
+function(git_submodule ${module})
+  if(GIT)
+    find_package(Git QUIET)
+    execute_process(
+      COMMAND ${GIT_EXECUTABLE} submodule update --init --recursive ${module}
+      WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} RESULT_VARIABLE GIT_RES)
+    if(NOT GIT_RES EQUAL "0")
+      message(
+        FATAL_ERROR
+          "git submodule update --init --recursive failed with ${GIT_RES}, please checkout submodules"
+      )
+    endif()
   endif()
-endif()
+endfunction()
 
-# Aiger:
-set(AIGER_PATH
-    ${CMAKE_CURRENT_SOURCE_DIR}/aiger
-    CACHE PATH "Path to Aiger")
-find_file(
-  AIGER_SRC
-  NAMES aiger.c
-  PATHS ${AIGER_PATH})
+# # Aiger:
+git_submodule(aiger)
+find_file(AIGER_SRC NAMES aiger.c PATHS ${AIGER_DIR})
 if(NOT AIGER_SRC)
-  message(FATAL_ERROR "Aiger library not found in ${AIGER_PATH}.")
+  message(FATAL_ERROR "Aiger library not found in ${AIGER_DIR}.")
 endif()
-add_library(aiger STATIC ${AIGER_PATH}/aiger.c)
-target_include_directories(aiger PUBLIC ${AIGER_PATH}/)
+add_library(aiger STATIC ${AIGER_DIR}/aiger.c)
+target_include_directories(aiger PUBLIC ${AIGER_DIR}/)
 
-# Format:
+# Targets
+# # Format:
 add_custom_target(
-  format
-  COMMAND clang-format -i ${sources} ${headers} || echo
-          "clang-format not installed"
-  COMMAND cmake-format -i ${CMAKE_CURRENT_LIST_FILE} || echo
-          "cmake-format not installed"
+  format_${CMAKE_PROJECT_NAME}
+  COMMAND clang-format -i ${sources} ${headers} || echo "clang-format not installed"
+  COMMAND cmake-format -i ${CMAKE_CURRENT_LIST_FILE} || echo "cmake-format not installed"
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
   COMMENT "Formatting files")
+set_target_properties(format_${CMAKE_PROJECT_NAME} PROPERTIES EXCLUDE_FROM_ALL TRUE)
 
-# Voircheck:
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/voircheck.in
-               ${CMAKE_CURRENT_BINARY_DIR}/voircheck @ONLY)
+# # Voircheck:
+if(CHECKER)
+  include(ExternalProject)
+  add_subdirectory(certifaiger)
+  configure_file(${CMAKE_CURRENT_SOURCE_DIR}/voircheck.in
+                 ${CMAKE_CURRENT_BINARY_DIR}/voircheck @ONLY)
+endif(CHECKER)
 
-# Voiraig:
+# # Voiraig:
 file(READ "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" VERSION)
 string(STRIP ${VERSION} VERSION)
-execute_process(
-  COMMAND bash "-c" "git show|head -1|awk '{print $2}'"
-  OUTPUT_STRIP_TRAILING_WHITESPACE
-  OUTPUT_VARIABLE GIT_ID)
+execute_process(COMMAND bash "-c" "git show|head -1|awk '{print $2}'"
+                OUTPUT_STRIP_TRAILING_WHITESPACE OUTPUT_VARIABLE GIT_ID)
 add_definitions("-DVERSION=\"${VERSION}\"")
 add_definitions("-DGITID=\"${GIT_ID}\"")
 
 add_executable(voiraig ${sources})
 target_link_libraries(voiraig aiger)
+install(TARGETS voiraig)
