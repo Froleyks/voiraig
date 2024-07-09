@@ -1,6 +1,5 @@
 cmake_minimum_required(VERSION 3.22.1)
 project(voiraig)
-find_package(Git QUIET)
 
 file(GLOB headers CONFIGURE_DEPENDS src/*.hpp)
 file(GLOB sources CONFIGURE_DEPENDS src/*.cpp)
@@ -9,9 +8,10 @@ file(GLOB sources CONFIGURE_DEPENDS src/*.cpp)
 option(LOG "Enable Logging" OFF)
 option(LTO "Enable Link-Time Optimization" ON)
 option(GIT "Automatically download dependencies" ON)
-option(CHECKER "Build Certificate Checker" ON)
 
-set(AIGER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/aiger CACHE PATH "aiger directory")
+set(AIGER_DIR ${CMAKE_CURRENT_LIST_DIR}/dependencies/aiger CACHE PATH "aiger directory")
+set(CERTIFAIGER_DIR ${CMAKE_CURRENT_LIST_DIR}/dependencies/aiger
+    CACHE PATH "certifaiger directory")
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
   set(LOG ON CACHE BOOL "Enable Logging" FORCE)
@@ -29,12 +29,12 @@ if(LOG)
 endif(LOG)
 
 # Dependencies:
-function(git_submodule ${module})
+function(git_submodule)
   if(GIT)
     find_package(Git QUIET)
     execute_process(
-      COMMAND ${GIT_EXECUTABLE} submodule update --init --recursive ${module}
-      WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} RESULT_VARIABLE GIT_RES)
+      COMMAND ${GIT_EXECUTABLE} submodule update --init --recursive ${ARGV0}
+      WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}/dependencies RESULT_VARIABLE GIT_RES)
     if(NOT GIT_RES EQUAL "0")
       message(
         FATAL_ERROR
@@ -44,14 +44,15 @@ function(git_submodule ${module})
   endif()
 endfunction()
 
-# # Aiger:
-git_submodule(aiger)
-find_file(AIGER_SRC NAMES aiger.c PATHS ${AIGER_DIR})
-if(NOT AIGER_SRC)
-  message(FATAL_ERROR "Aiger library not found in ${AIGER_DIR}.")
+if(NOT TARGET aiger)
+  git_submodule(aiger)
+  find_file(AIGER_SRC NAMES aiger.c PATHS ${AIGER_DIR})
+  if(NOT AIGER_SRC)
+    message(FATAL_ERROR "Aiger library not found in ${AIGER_DIR}.")
+  endif()
+  add_library(aiger STATIC ${AIGER_DIR}/aiger.c)
+  target_include_directories(aiger PUBLIC ${AIGER_DIR}/)
 endif()
-add_library(aiger STATIC ${AIGER_DIR}/aiger.c)
-target_include_directories(aiger PUBLIC ${AIGER_DIR}/)
 
 # Targets
 # # Format:
@@ -63,16 +64,8 @@ add_custom_target(
   COMMENT "Formatting files")
 set_target_properties(format_${PROJECT_NAME} PROPERTIES EXCLUDE_FROM_ALL TRUE)
 
-# # Voircheck:
-if(CHECKER)
-  include(ExternalProject)
-  add_subdirectory(certifaiger)
-  configure_file(${CMAKE_CURRENT_SOURCE_DIR}/voircheck.in
-                 ${CMAKE_CURRENT_BINARY_DIR}/voircheck @ONLY)
-endif(CHECKER)
-
 # # Voiraig:
-file(READ "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" VERSION)
+file(READ "${CMAKE_CURRENT_LIST_DIR}/VERSION" VERSION)
 string(STRIP ${VERSION} VERSION)
 execute_process(COMMAND bash "-c" "git show|head -1|awk '{print $2}'"
                 OUTPUT_STRIP_TRAILING_WHITESPACE OUTPUT_VARIABLE GIT_ID)

@@ -1,6 +1,6 @@
 [submodule "aiger"]
-	path = aiger
+	path = dependencies/aiger
 	url = git@github.com:Froleyks/aiger.git
 [submodule "certifaiger"]
-	path = certifaiger
+	path = dependencies/certifaiger
 	url = https://github.com/Froleyks/certifaiger
