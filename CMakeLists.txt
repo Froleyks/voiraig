@@ -10,8 +10,8 @@ option(LTO "Enable Link-Time Optimization" ON)
 option(GIT "Automatically download dependencies" ON)
 option(CHECK "Setup checking and fuzzing" ON)
 
-set(AIGER_DIR ${CMAKE_CURRENT_LIST_DIR}/dependencies/aiger CACHE PATH "aiger directory")
-set(CERTIFAIGER_DIR ${CMAKE_CURRENT_LIST_DIR}/dependencies/certifaiger
+set(AIGER_DIR ${CMAKE_CURRENT_LIST_DIR}/aiger CACHE PATH "aiger directory")
+set(CERTIFAIGER_DIR ${CMAKE_CURRENT_LIST_DIR}/certifaiger
     CACHE PATH "certifaiger directory")
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
@@ -35,7 +35,7 @@ function(git_submodule)
     find_package(Git QUIET)
     execute_process(
       COMMAND ${GIT_EXECUTABLE} submodule update --init --recursive ${ARGV0}
-      WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}/dependencies RESULT_VARIABLE GIT_RES)
+      WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR} RESULT_VARIABLE GIT_RES)
     if(NOT GIT_RES EQUAL "0")
       message(
         FATAL_ERROR
