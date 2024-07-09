@@ -8,9 +8,10 @@ file(GLOB sources CONFIGURE_DEPENDS src/*.cpp)
 option(LOG "Enable Logging" OFF)
 option(LTO "Enable Link-Time Optimization" ON)
 option(GIT "Automatically download dependencies" ON)
+option(CHECK "Setup checking and fuzzing" ON)
 
 set(AIGER_DIR ${CMAKE_CURRENT_LIST_DIR}/dependencies/aiger CACHE PATH "aiger directory")
-set(CERTIFAIGER_DIR ${CMAKE_CURRENT_LIST_DIR}/dependencies/aiger
+set(CERTIFAIGER_DIR ${CMAKE_CURRENT_LIST_DIR}/dependencies/certifaiger
     CACHE PATH "certifaiger directory")
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
@@ -52,6 +53,11 @@ if(NOT TARGET aiger)
   endif()
   add_library(aiger STATIC ${AIGER_DIR}/aiger.c)
   target_include_directories(aiger PUBLIC ${AIGER_DIR}/)
+endif()
+
+if(CHECK)
+  git_submodule(certifaiger)
+  add_subdirectory(${CERTIFAIGER_DIR})
 endif()
 
 # Targets
