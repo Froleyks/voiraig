@@ -4,3 +4,6 @@
 [submodule "certifaiger"]
 	path = certifaiger
 	url = https://github.com/Froleyks/certifaiger
+[submodule "cadical"]
+	path = cadical
+	url = https://github.com/arminbiere/cadical

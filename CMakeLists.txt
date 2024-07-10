@@ -11,8 +11,9 @@ option(GIT "Automatically download dependencies" ON)
 option(CHECK "Setup checking and fuzzing" ON)
 
 set(AIGER_DIR ${CMAKE_CURRENT_LIST_DIR}/aiger CACHE PATH "aiger directory")
-set(CERTIFAIGER_DIR ${CMAKE_CURRENT_LIST_DIR}/certifaiger
-    CACHE PATH "certifaiger directory")
+set(CADICAL_DIR ${CMAKE_CURRENT_LIST_DIR}/cadical CACHE PATH "CaDiCaL directory")
+set(CERTIFAIGER_DIR ${CMAKE_CURRENT_LIST_DIR}/certifaiger CACHE PATH
+                                                                "certifaiger directory")
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
   set(LOG ON CACHE BOOL "Enable Logging" FORCE)
@@ -33,9 +34,8 @@ endif(LOG)
 function(git_submodule)
   if(GIT)
     find_package(Git QUIET)
-    execute_process(
-      COMMAND ${GIT_EXECUTABLE} submodule update --init --recursive ${ARGV0}
-      WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR} RESULT_VARIABLE GIT_RES)
+    execute_process(COMMAND ${GIT_EXECUTABLE} submodule update --init --recursive ${ARGV0}
+                    WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR} RESULT_VARIABLE GIT_RES)
     if(NOT GIT_RES EQUAL "0")
       message(
         FATAL_ERROR
@@ -44,6 +44,20 @@ function(git_submodule)
     endif()
   endif()
 endfunction()
+
+git_submodule(cadical)
+include(ExternalProject)
+ExternalProject_Add(
+  CaDiCaL
+  PREFIX cadical
+  SOURCE_DIR ${CADICAL_DIR}
+  BUILD_IN_SOURCE 1
+  CONFIGURE_COMMAND ./configure
+  BUILD_COMMAND make -j
+  INSTALL_COMMAND cp build/libcadical.a <INSTALL_DIR> && make clean)
+add_library (cadical STATIC IMPORTED)
+set_target_properties(cadical PROPERTIES IMPORTED_LOCATION ${CMAKE_BINARY_DIR}/cadical/libcadical.a)
+target_include_directories(cadical INTERFACE ${CADICAL_DIR}/src)
 
 if(NOT TARGET aiger)
   git_submodule(aiger)
@@ -80,4 +94,5 @@ add_definitions("-DGITID=\"${GIT_ID}\"")
 
 add_executable(voiraig ${sources})
 target_link_libraries(voiraig aiger)
+target_link_libraries(voiraig cadical)
 install(TARGETS voiraig)
