@@ -23,27 +23,10 @@ inline void die(const char *fmt, ...) {
   va_end(ap);
   fputc('\n', stderr);
 #ifndef LOG
-  fputs("Compile with ./configure -l for more information\n", stderr);
+  fputs("Configure with cmake -DLOG=ON for more information\n", stderr);
 #endif // LOG
   fflush(stderr);
   exit(1);
-}
-
-namespace Logging {
-#ifdef LOG
-constexpr bool DISABLED = false;
-#else
-constexpr bool DISABLED = true;
-#endif // LOG
-
-inline unsigned &verbose() {
-  static unsigned verbose = 4;
-  return verbose;
-}
-
-inline bool &use_location() {
-  static bool use_location = false;
-  return use_location;
 }
 
 template <typename T>
@@ -82,6 +65,23 @@ std::ostream &operator<<(std::ostream &out, const std::tuple<T...> &tup) {
   print_tuple<0>(out, tup);
   out << ")";
   return out;
+}
+
+namespace Logging {
+#ifdef LOG
+constexpr bool DISABLED = false;
+#else
+constexpr bool DISABLED = true;
+#endif // LOG
+
+inline unsigned &verbose() {
+  static unsigned verbose = 4;
+  return verbose;
+}
+
+inline bool &use_location() {
+  static bool use_location = false;
+  return use_location;
 }
 
 inline double totalTime() {
@@ -321,8 +321,23 @@ inline std::string tempFile() {
 
 #ifndef NDEBUG
 #define ass(expr) assert(expr)
-#elif __has_cpp_attribute(assume)
-#define ass(expr) [[assume(expr)]]
 #else
-#define ass(expr) (void)sizeof(expr)
-#endif // NDEBUG
+
+# ifdef __has_cpp_attribute
+#  if __has_cpp_attribute(assume)
+#   define ass(expr) [[assume(expr)]]
+#  else
+#   define ass(expr) (void)sizeof(expr)
+#  endif
+# else
+#  define ass(expr) (void)sizeof(expr)
+# endif
+#endif
+
+// #ifndef NDEBUG
+// #define ass(expr) assert(expr)
+// #elif __has_cpp_attribute(assume)
+// #define ass(expr) [[assume(expr)]]
+// #else
+// #define ass(expr) (void)sizeof(expr)
+// #endif // NDEBUG
