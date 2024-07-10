@@ -1,12 +1,12 @@
 #include "options.hpp"
 
 #include "banner.hpp"
+#include "usage.hpp"
 #include "utils.hpp"
 
 #include <ctype.h>
 #include <string.h>
-
-#include "usage.hpp"
+#include <unistd.h>
 
 static void print_usage_of_generic_options(void);
 
@@ -167,38 +167,24 @@ void parse_options(int argc, char **argv, struct options *opts) {
     else if (!strcmp(opt, "--range")) print_option_ranges(), exit(0);
     else if (opt[0] == '-' && opt[1])
         die("invalid option '%s' (try '-h')", opt);
-    else if (opts->witness.file) die("too many arguments");
-    else if (opts->model.file) {
+    else if (opts->witness) die("too many arguments");
+    else if (opts->model) {
       if (!strcmp(opt, "-")) {
-        opts->witness.path = "";
-        opts->witness.file = stdout;
-      } else if (!(opts->witness.file = fopen(opt, "w")))
+        opts->witness = "";
+      } else if (access(opt, W_OK))
         die("can not open and write to '%s'", opt);
-      else {
-        opts->witness.path = opt;
-        opts->witness.close = true;
-      }
+      else { opts->witness = opt; }
     }
     else {
-      if (!strcmp(opt, "-")) {
-        opts->model.path = "<stdin>";
-        opts->model.file = stdin;
-      } else if (has_suffix(opt, ".bz2") || has_suffix(opt, ".gz") ||
-                 has_suffix(opt, ".xz")) {
+      if (has_suffix(opt, ".bz2") || has_suffix(opt, ".gz") ||
+          has_suffix(opt, ".xz")) {
         die("can not handle compressed file '%s'", opt);
-      } else {
-        opts->model.file = fopen(opt, "r");
-        opts->model.close = true;
-      }
-      if (!opts->model.file) die("can not open and read from '%s'", opt);
-      opts->model.path = opt;
+      } else if (access(opt, R_OK))
+        die("can not open and read from '%s'", opt);
+      opts->model = opt;
     }
   }
-
-  if (!opts->model.file) {
-    opts->model.path = "<stdin>";
-    opts->model.file = stdin;
-  }
+  if (!opts->model) { die(compact_usage.c_str()); }
 }
 
 static const char *bool_to_string(bool value) {

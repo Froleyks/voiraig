@@ -27,12 +27,6 @@
 #define DBGOPT(...) /**/
 #endif
 
-struct file {
-  bool close;
-  FILE *file;
-  const char *path;
-};
-
 struct options {
   unsigned seconds;
   unsigned optimize;
@@ -41,8 +35,8 @@ struct options {
 #define OPTION(TYPE, NAME, DEFAULT, MIN, MAX, DESCRIPTION) TYPE NAME;
   OPTIONS
 #undef OPTION
-  struct file model;
-  struct file witness;
+  const char *model;
+  const char *witness;
 };
 
 /*------------------------------------------------------------------------*/

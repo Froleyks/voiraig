@@ -1,3 +1,5 @@
+#pragma once
+#include <string>
 // clang-format off
 
 static std::string compact_usage =
