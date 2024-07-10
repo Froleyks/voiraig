@@ -27,7 +27,7 @@ if(LTO)
   set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
 endif(LTO)
 if(LOG)
-  add_definitions("-DLOG")
+  add_compile_definitions("LOG")
 endif(LOG)
 
 # Dependencies:
@@ -89,8 +89,8 @@ file(READ "${CMAKE_CURRENT_LIST_DIR}/VERSION" VERSION)
 string(STRIP ${VERSION} VERSION)
 execute_process(COMMAND bash "-c" "git show|head -1|awk '{print $2}'"
                 OUTPUT_STRIP_TRAILING_WHITESPACE OUTPUT_VARIABLE GIT_ID)
-add_definitions("-DVERSION=\"${VERSION}\"")
-add_definitions("-DGITID=\"${GIT_ID}\"")
+add_compile_definitions("VERSION=\"${VERSION}\"")
+add_compile_definitions("GITID=\"${GIT_ID}\"")
 
 add_executable(voiraig ${sources})
 target_link_libraries(voiraig aiger)
