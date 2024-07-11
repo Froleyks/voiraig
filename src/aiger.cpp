@@ -2,17 +2,13 @@
 
 #include <charconv>
 #include <cstring>
+#include <fstream>
 
 #include "utils.hpp"
 
+bool is_input(aiger *aig, unsigned l) { return aiger_is_input(aig, l); }
 
-bool is_input(aiger *aig, unsigned l) {
-  return aiger_is_input(aig, l);
-}
-
-bool is_latch(aiger *aig, unsigned l) {
-  return aiger_is_latch(aig, l);
-}
+bool is_latch(aiger *aig, unsigned l) { return aiger_is_latch(aig, l); }
 
 unsigned simulates_lit(aiger *aig, unsigned l) {
   assert(is_input(aig, l) || is_latch(aig, l));
@@ -25,15 +21,13 @@ unsigned simulates_lit(aiger *aig, unsigned l) {
   return simulated_l;
 }
 
-const aiger_symbol *simulates_input(aiger *model, aiger *witness,
-                                    unsigned l) {
+const aiger_symbol *simulates_input(aiger *model, aiger *witness, unsigned l) {
   const unsigned simulated_l = simulates_lit(witness, l);
   if (simulated_l == INVALID_LIT) return nullptr;
   return aiger_is_input(model, simulated_l);
 }
 
-const aiger_symbol *simulates_latch(aiger *model, aiger *witness,
-                                    unsigned l) {
+const aiger_symbol *simulates_latch(aiger *model, aiger *witness, unsigned l) {
   const unsigned simulated_l = simulates_lit(witness, l);
   if (simulated_l == INVALID_LIT) return nullptr;
   return aiger_is_latch(model, simulated_l);
@@ -76,8 +70,7 @@ unsigned disj(aiger *model, unsigned x, unsigned y) {
   return aiger_not(conj(model, aiger_not(x), aiger_not(y)));
 }
 // consumes v
-template <bool opAnd>
-unsigned reduce(aiger *model, std::vector<unsigned> &v) {
+template <bool opAnd> unsigned reduce(aiger *model, std::vector<unsigned> &v) {
   assert(v.size());
   L4 << "reducing" << v;
   const auto begin = v.begin();
@@ -117,8 +110,7 @@ unsigned eq(aiger *aig, unsigned x, unsigned y) {
                         aiger_not(conj(aig, aiger_not(x), aiger_not(y)))));
 }
 unsigned ite(aiger *model, unsigned i, unsigned t, unsigned e) {
-  return disj(model, conj(model, i, t),
-                    conj(model, aiger_not(i), e));
+  return disj(model, conj(model, i, t), conj(model, aiger_not(i), e));
 }
 std::span<aiger_symbol> inputs(const aiger *aig) {
   return {aig->inputs, aig->num_inputs};
@@ -143,4 +135,53 @@ bool inputs_latches_reencoded(aiger *aig) {
     v += 2;
   }
   return true;
+}
+
+void write_witness(aiger *circuit, const char *path) {
+  int err;
+  if (path)
+    err = aiger_open_and_write_to_file(circuit, path);
+  else
+    err = aiger_write_to_file(circuit, aiger_ascii_mode, stdout);
+  if (!err) // the write proctions return zero on error...
+    die("failed to write witness");
+}
+
+void expand(std::ostream &o, const std::vector<unsigned> &c,
+            aiger_symbol *first_symbol, unsigned n) {
+  if (!first_symbol) return;
+  L3 << "expand" << c << "from" << first_symbol->lit << "to length" << n;
+  unsigned i = (first_symbol->lit / 2) + 1;
+  for (auto l : c) {
+    const unsigned v = l / 2;
+    for (; i < v; i++)
+      o << 'x';
+    o << (~l & 1u);
+    i += 1;
+  }
+  for (; i < n; i++)
+    o << 'x';
+}
+
+// The cex format:
+// 0: Cube that contains the literals for the uninitialized latches the value of
+// which is necessary for the trace. May be bigger.
+// rest: Cube of inputs from initial to bad necessary for the trace.
+void write_witness(aiger *model, const std::vector<std::vector<unsigned>> &cex,
+                   const char *path) {
+  L1 << "writing counter example";
+  std::ofstream f;
+  if (path) {
+    f.open(path);
+    if (!f.is_open()) die("cannot write %s", path);
+  }
+  std::ostream &o = (path ? f : std::cout);
+  o << "1\nb0\n";
+  expand(o, cex[0], model->latches, model->num_inputs + model->num_latches);
+  o << "\n";
+  for (unsigned i = 1; i < cex.size(); ++i) {
+    expand(o, cex[i], model->inputs, model->num_inputs);
+    o << "\n";
+  }
+  o << "." << std::endl;
 }

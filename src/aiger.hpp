@@ -1,5 +1,7 @@
 #pragma once
 
+#include "utils.hpp"
+
 #include <cassert>
 #include <iostream>
 #include <numeric>
@@ -70,6 +72,7 @@ struct InAIG {
   aiger *aig;
   InAIG(const char *path) : aig(aiger_init()) {
     const char *err = aiger_open_and_read_from_file(aig, path);
+    L4 << "read" << path;
     if (err) {
       std::cerr << "certifaiger: parse error reading " << path << ": " << err
                 << "\n";
@@ -105,3 +108,8 @@ struct OutAIG {
   }
   aiger *operator*() const { return aig; }
 };
+
+void write_witness(aiger *circuit, const char *path);
+
+void write_witness(aiger *model, const std::vector<std::vector<unsigned>> &cex,
+                   const char *path);

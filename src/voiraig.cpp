@@ -13,4 +13,11 @@ int main(int argc, char *argv[]) {
   InAIG model(options.model);
   std::vector<std::vector<unsigned>> cex;
   const bool bug = ic3(*model, cex);
+  if (bug) {
+    write_witness(*model, cex, options.witness);
+    return 10;
+  } else {
+    write_witness(*model, options.witness);
+    return 20;
+  }
 }

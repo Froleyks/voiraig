@@ -1,10 +1,9 @@
 #include "ic3.hpp"
 
+#include "aiger.hpp"
 #include "cadical.hpp"
 #include "ternary.hpp"
 #include "utils.hpp"
-#include "aiger.hpp"
-
 
 #include <algorithm>
 #include <limits>
@@ -114,10 +113,11 @@ public:
   unsigned B;
   CaDiCaL::Solver *solver;
   Frame(aiger *model) {
+    assert(model);
     solver = new CaDiCaL::Solver();
     // TODO only on demand
     initialize(model, solver);
-    B = model->outputs[0].lit;
+    B = output(model);
   }
   bool intersects(const Cube &c) {
     // TODO do I need to minimize here?
@@ -167,7 +167,7 @@ Cube bad(aiger *model, Frame &f, bool minimize = true) {
     s[i] = f.solver->val(i + 1) > 0 ? X1 : X0;
 #ifndef NDEBUG
   L3 << "sanity check simulation";
-  simulate(model->ands, model->num_ands, s);
+  propagate(model->ands, model->num_ands, s);
   assert(s[IDX(f.B)] == STX(f.B));
 #endif
 
@@ -248,7 +248,7 @@ Cube predecessor(aiger *model, Frame &f, Cube &b, Frame &f0, bool minA = true) {
 #ifndef NDEBUG
   L3 << "a" << cube(model, f.solver) << "b" << b << "/" << bNext;
   L3 << "sanity check simulation";
-  simulate(model->ands, model->num_ands, s);
+  propagate(model->ands, model->num_ands, s);
   // L3 << "b" << b << "to" << bNext;
   // L3 << cube(model, f.solver);
   assert(std::all_of(bNext.begin(), bNext.end(),
@@ -360,7 +360,10 @@ bool ic3(aiger *model, std::vector<std::vector<unsigned>> &cex) {
         for (unsigned i = converged; i < frames.size(); ++i)
           for (auto &c : frames[i].cubes)
             bs.push_back(conj(model, c));
-        model->outputs->lit = disj(model, bs);
+        if (model->num_outputs)
+          model->outputs->lit = disj(model, bs);
+        else
+          aiger_add_output(model, disj(model, bs), "");
         // TODO move this to uniqueptr
         for (auto &f : frames)
           delete f.solver;

@@ -6,7 +6,6 @@
 
 #include <ctype.h>
 #include <string.h>
-#include <unistd.h>
 
 static void print_usage_of_generic_options(void);
 
@@ -169,18 +168,16 @@ void parse_options(int argc, char **argv, struct options *opts) {
         die("invalid option '%s' (try '-h')", opt);
     else if (opts->witness) die("too many arguments");
     else if (opts->model) {
-      if (!strcmp(opt, "-")) {
+      if (!strcmp(opt, "-"))
         opts->witness = "";
-      } else if (access(opt, W_OK))
-        die("can not open and write to '%s'", opt);
-      else { opts->witness = opt; }
+      else
+        opts->witness = opt;
     }
     else {
       if (has_suffix(opt, ".bz2") || has_suffix(opt, ".gz") ||
           has_suffix(opt, ".xz")) {
         die("can not handle compressed file '%s'", opt);
-      } else if (access(opt, R_OK))
-        die("can not open and read from '%s'", opt);
+      }
       opts->model = opt;
     }
   }
