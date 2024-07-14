@@ -123,6 +123,10 @@ std::span<aiger_symbol> latches(const aiger *aig) {
 std::span<aiger_and> ands(const aiger *aig) {
   return {aig->ands, aig->num_ands};
 }
+std::span<aiger_symbol> constraints(const aiger *aig) {
+  return {aig->constraints, aig->num_constraints};
+}
+
 
 bool inputs_latches_reencoded(aiger *aig) {
   unsigned v{2};

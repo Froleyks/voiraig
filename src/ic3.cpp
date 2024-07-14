@@ -111,6 +111,7 @@ public:
   // Each cube is also blocked in all previous frames.
   std::vector<Cube> cubes;
   unsigned B;
+  unsigned C;
   CaDiCaL::Solver *solver;
   Frame(aiger *model) {
     assert(model);
@@ -118,6 +119,7 @@ public:
     // TODO only on demand
     initialize(model, solver);
     B = output(model);
+    C = conj(model, constraints(model) | lits);
   }
   bool intersects(const Cube &c) {
     // TODO do I need to minimize here?
@@ -157,6 +159,7 @@ void addBlockedCube(std::vector<Frame> &frames, const Cube c, unsigned k) {
 Cube bad(aiger *model, Frame &f, bool minimize = true) {
   L3 << "searching for bad";
   f.solver->assume(SAT(f.B));
+  f.solver->assume(SAT(f.C));
   const int res = f.solver->solve();
   if (res == 20) return bot;
   assert(res == 10);
@@ -206,6 +209,7 @@ Cube predecessor(aiger *model, Frame &f, Cube &b, Frame &f0, bool minA = true) {
     f.solver->assume(sat);
     if (constrain) f.solver->constrain(SAT(NOT(g)));
   }
+  f.solver->assume(SAT(f.C));
   if (constrain && b.size()) f.solver->constrain(0);
   assert(bNext.size() <= model->num_latches);
   const int res = f.solver->solve();

@@ -40,8 +40,17 @@ unsigned input(aiger *aig);
 
 unsigned conj(aiger *aig, unsigned x, unsigned y);
 unsigned conj(aiger *aig, std::vector<unsigned> &v);
+inline unsigned conj(aiger *aig, auto range) {
+  std::vector<unsigned> v(range.begin(), range.end());
+  return conj(aig, v);
+}
 unsigned disj(aiger *aig, unsigned x, unsigned y);
 unsigned disj(aiger *aig, std::vector<unsigned> &v);
+inline unsigned disj(aiger *aig, auto range) {
+  std::vector<unsigned> v(range.begin(), range.end());
+  return disj(aig, v);
+}
+
 unsigned impl(aiger *aig, unsigned x, unsigned y);
 unsigned eq(aiger *aig, unsigned x, unsigned y);
 unsigned ite(aiger *aig, unsigned c, unsigned t, unsigned e);
@@ -51,6 +60,7 @@ aiger_symbol *getLatch(aiger *medel, unsigned lit);
 std::span<aiger_symbol> inputs(const aiger *aig);
 std::span<aiger_symbol> latches(const aiger *aig);
 std::span<aiger_and> ands(const aiger *aig);
+std::span<aiger_symbol> constraints(const aiger *aig);
 
 static constexpr auto lits =
     std::views::transform([](const auto &l) { return l.lit; });
@@ -84,12 +94,14 @@ struct InAIG {
                 << path << "\n";
       exit(2);
     }
-    if (aig->num_constraints + aig->num_justice + aig->num_fairness)
-      std::cerr << "certifaiger: WARNING constraints, justice and fairness are "
-                   "not supported: "
-                << path << "\n";
+    if (aig->num_justice + aig->num_fairness) {
+      std::cerr
+          << "certifaiger: WARNING justice and fairness are not supported: "
+          << path << "\n";
+      exit(3);
+    }
     if (aig->num_bad + aig->num_outputs > 1)
-      std::cerr << "certifaiger: WARNING Multiple properties. Using "
+      std::cout << "certifaiger: WARNING Multiple properties. Using "
                 << (aig->num_bad ? "bad" : "output") << "0: " << path << "\n";
   }
   ~InAIG() { aiger_reset(aig); }
