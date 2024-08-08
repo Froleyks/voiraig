@@ -281,13 +281,15 @@ inline int cmd(const std::string &cmd, std::string &output) {
   if (!pipe) throw std::runtime_error("popen() failed!");
   while (fgets(buffer.data(), buffer.size(), pipe) != nullptr)
     output += buffer.data();
-  return WEXITSTATUS(pclose(pipe));
+  int status = (pclose(pipe));
+  return WEXITSTATUS(status);
 }
 
 inline int cmd(const std::string &cmd) {
   L5 << "Running command: " << cmd;
   std::string silent = cmd + " > /dev/null";
-  return WEXITSTATUS(system(silent.c_str()));
+  int status = system(silent.c_str());
+  return WEXITSTATUS(status);
 }
 
 inline std::string tempFile() {
