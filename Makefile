@@ -5,7 +5,7 @@ fuzz: fuzz/Makefile
 	./fuzz/certifaiger/certifuzzer ./fuzz/voiraig
 debug: debug/Makefile
 	$(MAKE) -C debug --no-print-directory
-	valgrind debug/certifaiger/certified debug/voiraig fuzz/certifaiger/bug.aag
+	valgrind debug/certifaiger/certified debug/voiraig fuzz/certifaiger/bug.aag fuzz/certifaiger/wit.aag
 build/Makefile: CMakeLists.txt
 	cmake -DCMAKE_BUILD_TYPE=Release -B build
 fuzz/Makefile: CMakeLists.txt
