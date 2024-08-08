@@ -1,5 +1,6 @@
 #pragma once
 
+#include "options.hpp"
 #include "utils.hpp"
 
 #include <cassert>
@@ -80,7 +81,7 @@ bool inputs_latches_reencoded(aiger *aig);
 // Read only circuit for model and witness.
 struct InAIG {
   aiger *aig;
-  InAIG(const char *path) : aig(aiger_init()) {
+  InAIG(const char *path, options *options = 0) : aig(aiger_init()) {
     const char *err = aiger_open_and_read_from_file(aig, path);
     L4 << "read" << path;
     if (err) {
@@ -103,6 +104,17 @@ struct InAIG {
     if (aig->num_bad + aig->num_outputs > 1)
       std::cout << "certifaiger: WARNING Multiple properties. Using "
                 << (aig->num_bad ? "bad" : "output") << "0: " << path << "\n";
+    unsigned embedded_options{};
+    if (options) {
+      char **p, *str;
+      for (p = aig->comments; (str = *p); p++) {
+        if (*str != '-' || *(str + 1) != '-') continue;
+        embedded_options++;
+        parse_option_with_value(options, str);
+      }
+      LI2(embedded_options)
+          << "Parsed" << embedded_options << "embedded options";
+    }
   }
   ~InAIG() { aiger_reset(aig); }
   aiger *operator*() const { return aig; }

@@ -7,10 +7,10 @@
 #include "utils.hpp"
 
 int main(int argc, char *argv[]) {
-  print_banner();
   options options;
   parse_options(argc, argv, &options);
-  InAIG model(options.model);
+  print_banner();
+  InAIG model(options.model, &options);
   std::vector<std::vector<unsigned>> cex;
   const bool bug = ic3(*model, cex);
   if (bug) {
