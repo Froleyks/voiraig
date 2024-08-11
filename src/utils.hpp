@@ -1,5 +1,7 @@
 #pragma once
 
+#include "options.hpp"
+
 #include <array>
 #include <cassert>
 #include <cstdarg>
@@ -83,6 +85,12 @@ inline bool &use_location() {
   static bool use_location = false;
   return use_location;
 }
+inline void init(options *opt) {
+#ifdef LOG
+  verbose() = opt->verbosity;
+  use_location() = opt->location;
+#endif // LOG
+}
 
 inline double totalTime() {
   double res;
@@ -103,7 +111,8 @@ struct Logger {
   Logger(const std::string_view file, const int line) {
     assert(line);
     if (use_location())
-      os << std::setw(10) << std::fixed << file << ":" << line << ":";
+      os << std::setw(10) << std::fixed << file.substr(file.find("/src/") + 1)
+         << ":" << line << ":";
     else
       os << std::setw(13) << std::fixed << std::setprecision(6) << totalTime()
          << ":";
@@ -252,15 +261,15 @@ void log_values(const std::string_view file, const int line, std::string names,
     L0
 
 #define LI1(CONDITION) DUMMY_STREAM
-#define LV1(...) LX
+#define LV1(...) LX(...)
 #define LI2(CONDITION) DUMMY_STREAM
-#define LV2(...) LX
+#define LV2(...) LX(...)
 #define LI3(CONDITION) DUMMY_STREAM
-#define LV3(...) LX
+#define LV3(...) LX(...)
 #define LI4(CONDITION) DUMMY_STREAM
-#define LV4(...) LX
+#define LV4(...) LX(...)
 #define LI5(CONDITION) DUMMY_STREAM
-#define LV5(...) LX
+#define LV5(...) LX(...)
 #define TIME(LEVEL) DUMMY_STREAM
 #define ADD_TIME(LEVEL, TIMER) DUMMY_STREAM
 
@@ -325,15 +334,15 @@ inline std::string tempFile() {
 #define ass(expr) assert(expr)
 #else
 
-# ifdef __has_cpp_attribute
-#  if __has_cpp_attribute(assume)
-#   define ass(expr) [[assume(expr)]]
-#  else
-#   define ass(expr) (void)sizeof(expr)
-#  endif
-# else
-#  define ass(expr) (void)sizeof(expr)
-# endif
+#ifdef __has_cpp_attribute
+#if __has_cpp_attribute(assume)
+#define ass(expr) [[assume(expr)]]
+#else
+#define ass(expr) (void)sizeof(expr)
+#endif
+#else
+#define ass(expr) (void)sizeof(expr)
+#endif
 #endif
 
 // #ifndef NDEBUG

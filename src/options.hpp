@@ -8,9 +8,12 @@
 
 // clang-format off
 // options have to be sorted!
-// <let ((beg (progn (next-line 2) (bol))) (end (progn (forward-paragraph) (point)))) (shell-command-on-region beg end "sort -k 2" t t) (align-regexp beg end "\\(,\\s-*\\) " 1 1 t)>
+// <let ((beg (progn (next-line 3) (bol))) (end (progn (forward-paragraph) (point)))) (shell-command-on-region beg end "sort -k 2" t t) (align-regexp beg end "\\(,\\s-*\\) " 1 1 t)>
 //                 Name   Def Min Max Description
 #define OPTIONS \
+  OPTION(bool,     kind,      0, 0, 1, "use k-Induction") \
+  LOGOPT(bool,     location,  1, 0, 1, "use location for logging") \
+  OPTION(unsigned, paths,     0, 0, 2, "type of simple path constrains") \
   LOGOPT(unsigned, verbosity, 2, 0, 5, "verbosity level")
 
 // clang-format on

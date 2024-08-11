@@ -78,7 +78,6 @@ static constexpr auto uninitialized =
 
 bool inputs_latches_reencoded(aiger *aig);
 
-// Read only circuit for model and witness.
 struct InAIG {
   aiger *aig;
   InAIG(const char *path, options *options = 0) : aig(aiger_init()) {
