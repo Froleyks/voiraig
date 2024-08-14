@@ -436,8 +436,8 @@ unsigned mapping_old_index_to_k_witness_circuit(unsigned index, unsigned i) {
   if (index == 0 || index == 1) return index;
   unsigned complement = (k - 1) - i;
   unsigned new_index;
-  LV5(num_inputs, num_latches, num_ands, total_number_literals, k, index, i,
-      complement);
+  // LV5(num_inputs, num_latches, num_ands, total_number_literals, k, index, i,
+  //     complement);
   if (is_input(index)) {
     new_index = index + complement * num_inputs * 2;
     L5 << "is input" << index << "at" << i << "maps to" << new_index;
@@ -1191,16 +1191,35 @@ static void witness(int kin, aiger *&k_witness_model) {
 
   unsigned new_property = current_index;
   w_output = current_index + 1;
+  current_index += 2;
 
   for (int i = 0; i < model->num_constraints; ++i) {
     aiger_add_constraint(k_witness_model, (model->constraints + i)->lit, "");
   }
 
-  // TODO add uniquness constraint
-  for (int i = 1; i < k; ++i) {
-    for (int j = 0; j < i; ++j) {
-      for (int l = 0; l < model->num_latches; ++l) {}
+  if (dcs | rcs) {
+    std::vector<unsigned> unique, differs;
+    unique.reserve((k * (k - 1)) / 2);
+    differs.reserve(num_latches);
+    for (int i = 1; i < k; ++i) {
+      for (int j = 0; j < i; ++j) {
+        differs.clear(); // usually maintains capacity
+        for (int l = 0; l < model->num_latches; ++l) {
+          aiger_symbol *latch = model->latches + l;
+          unsigned lit_i =
+              mapping_old_index_to_k_witness_circuit(latch->lit, i); // L_i
+          unsigned lit_j =
+              mapping_old_index_to_k_witness_circuit(latch->lit, j); // L_j
+          unsigned inj = conj(k_witness_model, lit_i, neg(lit_j));
+          unsigned nij = conj(k_witness_model, neg(lit_i), lit_j);
+          differs.push_back(disj(k_witness_model, inj, nij));
+        }
+        unique.push_back(conj(k_witness_model, differs));
+      }
     }
+    assert(unique.size() == (k * (k - 1)) / 2);
+    unsigned uniqueness = conj(k_witness_model, unique);
+    aiger_add_constraint(k_witness_model, uniqueness, "uniqueness");
   }
 
   // add mapping
@@ -1223,6 +1242,7 @@ static void witness(int kin, aiger *&k_witness_model) {
 
 bool kind(aiger *aig, aiger *&k_witness_model,
           std::vector<std::vector<unsigned>> &cex, unsigned simple_path) {
+  LV4(simple_path);
   if (simple_path == 0)
     ncs = 1;
   else if (simple_path == 1)

@@ -13,7 +13,7 @@
 #define OPTIONS \
   OPTION(bool,     kind,      0, 0, 1, "use k-Induction") \
   LOGOPT(bool,     location,  1, 0, 1, "use location for logging") \
-  OPTION(unsigned, paths,     0, 0, 2, "type of simple path constrains") \
+  OPTION(unsigned, paths,     0, 0, 0, "type of simple path constrains") \
   LOGOPT(unsigned, verbosity, 2, 0, 5, "verbosity level")
 
 // clang-format on
