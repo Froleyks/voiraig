@@ -25,7 +25,7 @@ int main(int argc, char *argv[]) {
     L0 << "exit 10\n";
     return 10;
   } else {
-    if (options.certify) {
+    if (options.certificate) {
       if (witness)
         write_witness(witness, options.witness);
       else
