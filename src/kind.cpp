@@ -479,6 +479,7 @@ unsigned map_original(unsigned l) {
     return l + (kw_num_inputs + kw_num_latches) * 2;
   }
   assert(false);
+  return 0;
 }
 
 unsigned map_to_next(unsigned l) {
@@ -498,6 +499,7 @@ unsigned map_to_next(unsigned l) {
     return l + kw_total_number_literals * 2;
   }
   assert(false);
+  return 0;
 }
 
 static void witness(int kin, aiger *&k_witness_model) {
