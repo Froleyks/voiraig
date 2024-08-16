@@ -21,14 +21,16 @@ int main(int argc, char *argv[]) {
   else
     bug = ic3(*model, cex);
   if (bug) {
-    write_witness(*model, cex, options.witness);
+    if (options.trace) write_witness(*model, cex, options.witness);
     L0 << "exit 10\n";
     return 10;
   } else {
-    if (witness)
-      write_witness(witness, options.witness);
-    else
-      write_witness(*model, options.witness);
+    if (options.certify) {
+      if (witness)
+        write_witness(witness, options.witness);
+      else
+        write_witness(*model, options.witness);
+    }
     if (witness && witness != *model) aiger_reset(witness);
     L0 << "exit 20\n";
     return 20;
