@@ -11,9 +11,11 @@
 // <let ((beg (progn (next-line 3) (bol))) (end (progn (forward-paragraph) (point)))) (shell-command-on-region beg end "sort -k 2" t t) (align-regexp beg end "\\(,\\s-*\\) " 1 1 t)>
 //                 Name   Def Min Max Description
 #define OPTIONS \
+  OPTION(bool,     certify,   1, 0, 1, "produce witness circuit") \
   OPTION(bool,     kind,      0, 0, 1, "use k-Induction") \
   LOGOPT(bool,     location,  1, 0, 1, "use location for logging") \
   OPTION(unsigned, paths,     0, 0, 0, "type of simple path constrains") \
+  OPTION(bool,     trace,     1, 0, 1, "produce cex trace") \
   LOGOPT(unsigned, verbosity, 2, 0, 5, "verbosity level")
 
 // clang-format on
