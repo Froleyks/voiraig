@@ -3,18 +3,6 @@
 #include <algorithm>
 #include <iostream>
 
-#ifdef LOG
-std::ostream &operator<<(std::ostream &out, const std::vector<ternary> &v) {
-  static constexpr char repr[] = {'X', '_', '_', '_', '1', '_', '0'};
-  out << "(";
-  for (auto x : v)
-    out << repr[x] << " ";
-  if (v.size()) out << "\b";
-  out << ")";
-  return out;
-}
-#endif // QUIET
-
 bool validSimulation(aiger_and ands[], const unsigned num_ands,
                      const std::vector<ternary> &s) {
   for (unsigned int i = 0; i < num_ands; i++) {
@@ -45,27 +33,7 @@ bool validSimulation(aiger_and ands[], const unsigned num_ands,
   }
   return true;
 }
-
-void propagate(aiger_and *ands, const unsigned num_ands,
-               std::vector<ternary> &s) {
-  // X  -X    X  -X   1  -1   0  -0
-  static constexpr ternary AND_NEG[] = {
-      X,  X,  X,  X,  X,  X0, X0, X,  //  X
-      X,  X,  X,  X,  X,  X0, X0, X,  // -X
-      X,  X,  X,  X,  X,  X0, X0, X,  //  X
-      X,  X,  X,  X,  X,  X0, X0, X,  // -X
-      X,  X,  X,  X,  X1, X0, X0, X1, //  1
-      X0, X0, X0, X0, X0, X0, X0, X0, // -1
-      X0, X0, X0, X0, X0, X0, X0, X0, //  0
-      X,  X,  X,  X,  X1, X0, X0, X1, // -0
-  };
-  for (unsigned int i = 0; i < num_ands; i++) {
-    const unsigned L{ands[i].rhs0}, R{ands[i].rhs1};
-    const unsigned l = s[L >> 1] | (L & 1u);
-    const unsigned r = s[R >> 1] | (R & 1u);
-    s[ands[i].lhs >> 1] = AND_NEG[r + 8 * l];
-  }
-}
+#if ENCODING != 3
 std::vector<unsigned> reduce(aiger *model,
                              const std::vector<unsigned> &obligations,
                              std::vector<ternary> &s) {
@@ -93,3 +61,4 @@ std::vector<unsigned> reduce(aiger *model,
   }
   return cube;
 }
+#endif

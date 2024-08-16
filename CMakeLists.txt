@@ -93,7 +93,13 @@ execute_process(COMMAND bash "-c" "git show|head -1|awk '{print $2}'"
 add_compile_definitions("VERSION=\"${VERSION}\"")
 add_compile_definitions("GITID=\"${GIT_ID}\"")
 
-add_executable(voiraig ${sources})
-target_link_libraries(voiraig aiger)
-target_link_libraries(voiraig cadical)
-install(TARGETS voiraig)
+foreach(ENCODING_VAL RANGE 0 5)
+  foreach(ALGORITHM_VAL RANGE 0 2)
+    set(TARGET_NAME "voiraig_enc_${ENCODING_VAL}_alg_${ALGORITHM_VAL}")
+    add_executable(${TARGET_NAME} ${sources})
+    target_compile_definitions(${TARGET_NAME} PRIVATE ENCODING=${ENCODING_VAL}
+                                                      ALGORITHM=${ALGORITHM_VAL})
+    target_link_libraries(${TARGET_NAME} aiger)
+    target_link_libraries(${TARGET_NAME} cadical)
+  endforeach()
+endforeach()
