@@ -33,7 +33,8 @@ set(CMAKE_CXX_FLAGS_FUZZING "-O3" CACHE STRING "Flags for fuzzing build type" FO
 
 # Dependencies:
 function(git_submodule)
-  if(GIT AND NOT EXISTS ${CMAKE_CURRENT_LIST_DIR}/${ARGV0})
+  file(GLOB DIR_CONTENTS ${CMAKE_CURRENT_LIST_DIR}/${ARGV0}/*)
+  if(GIT AND DIR_CONTENTS STREQUAL "")
     find_package(Git QUIET)
     execute_process(COMMAND ${GIT_EXECUTABLE} submodule update --init --recursive ${ARGV0}
                     WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR} RESULT_VARIABLE GIT_RES)
@@ -56,8 +57,9 @@ ExternalProject_Add(
   CONFIGURE_COMMAND ./configure
   BUILD_COMMAND make -j
   INSTALL_COMMAND cp build/libcadical.a <INSTALL_DIR> && make clean)
-add_library (cadical STATIC IMPORTED)
-set_target_properties(cadical PROPERTIES IMPORTED_LOCATION ${CMAKE_BINARY_DIR}/cadical/libcadical.a)
+add_library(cadical STATIC IMPORTED)
+set_target_properties(cadical PROPERTIES IMPORTED_LOCATION
+                                         ${CMAKE_BINARY_DIR}/cadical/libcadical.a)
 target_include_directories(cadical INTERFACE ${CADICAL_DIR}/src)
 
 if(NOT TARGET aiger)
