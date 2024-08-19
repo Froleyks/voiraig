@@ -29,13 +29,13 @@
 #endif
 
 #ifdef LOG
-    std::ostream &
+    inline std::ostream &
     operator<<(std::ostream &out, const std::vector<ternary> &v) {
   static constexpr char repr[] =
 #if ENCODING == 0
       {'0', '1', 'X'};
 #elif ENCODING == 1
-      {'0' '_', 'X', '1'};
+      {'0', '_', 'X', '1'};
 #elif ENCODING == 2
       {'_', 'X', '0', '1'};
 #elif ENCODING == 3
