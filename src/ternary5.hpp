@@ -3,7 +3,7 @@ static constexpr ternary NEG[] = {X0, X1, X, X, X, X, X1, X0};
 #define ISA(L) ((L) != X)
 #define STX(L) (((L) & 1u) ? X0 : X1)
 // Ternary value to sign bit that can be or'ed to a variable to get a literal.
-#define XTS(L) (assert(!ISX(L)), ((~(L)) & 2u) >> 1)
+#define XTS(L) (((~(L)) & 2u) >> 1)
 inline ternary sign(ternary t, unsigned l) { return NEG[t | (l & 1u)]; }
 inline bool flipped(ternary c, ternary u) { return (c ^ u) && ISA(u); }
 

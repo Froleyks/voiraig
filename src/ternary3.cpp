@@ -479,7 +479,7 @@ std::vector<unsigned> reduce(aiger *model,
                              std::vector<ternary> &s) {
 #ifndef NDEBUG
   L4 << "checking that obligations are fulfilled before reduction";
-  simulate(model->ands, model->num_ands, s);
+  propagate(model->ands, model->num_ands, s);
   const bool covered =
           std::none_of(obligations.begin(), obligations.end(),
                        [&s](const unsigned l) { return ISX(s[IDX(l)]); });
