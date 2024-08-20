@@ -12,7 +12,7 @@
 //                 Name   Def Min Max Description
 #define OPTIONS \
   OPTION(bool,     certificate, 1, 0, 1, "produce witness circuit") \
-  OPTION(bool,     kind,        0, 0, 1, "use k-Induction") \
+  OPTION(bool,     kind,        0, 0, 0, "use k-Induction") \
   LOGOPT(bool,     location,    1, 0, 1, "use location for logging") \
   OPTION(unsigned, paths,       0, 0, 0, "type of simple path constrains") \
   OPTION(bool,     trace,       1, 0, 1, "produce cex trace") \

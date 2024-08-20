@@ -42,13 +42,13 @@ std::vector<unsigned> reduce(aiger *model,
   for (unsigned i = lBegin; i < lEnd; ++i) {
     // TODO skip those that are in obligations?
     const ternary v = s[i];
-    assert(v);
+    assert(ISA(v));
     s[i] = X;
     L3 << "try to eliminate latch" << (i << 1);
     propagate(model->ands, model->num_ands, s);
     const bool covered =
         std::none_of(obligations.begin(), obligations.end(),
-                     [&s](const unsigned l) { return !(s[IDX(l)]); });
+                     [&s](const unsigned l) { return !ISA(s[IDX(l)]); });
     LI3(covered) << "eliminated" << (i << 1);
     if (!covered) s[i] = v;
   }
@@ -56,7 +56,7 @@ std::vector<unsigned> reduce(aiger *model,
   std::vector<unsigned> cube;
   cube.reserve(model->num_latches);
   for (unsigned i = lBegin; i < lEnd; ++i) {
-    if (!(s[i])) continue;
+    if (!ISA(s[i])) continue;
     cube.push_back((i << 1) | XTS(s[i]));
   }
   return cube;
