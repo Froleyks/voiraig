@@ -505,6 +505,7 @@ std::vector<unsigned> reduce(aiger *model,
 
   // Generate candidates and hits in an alternating manner
   while (not candidates.empty()) {
+    L5 << "candidates: " << candidates.size();
     hits = generate_hits(simulator, obligations, batch_s, candidates);
     assert(candidates.empty());
 
