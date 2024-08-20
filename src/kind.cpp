@@ -537,11 +537,8 @@ static void witness(int kin, aiger *&k_witness_model) {
   unsigned original_output;
   unsigned original_p;
   unsigned w_output;
-  std::vector<unsigned> *Rs = new std::vector<unsigned>();
-  std::vector<unsigned> *hs =
-      new std::vector<unsigned>(); /* size of k-1, from 1..k-1, F^i =
-                                      F(L^{i-1})*/
-  std::vector<unsigned> *ps = new std::vector<unsigned>(); /* the properties */
+  std::vector<unsigned> Rs;
+  std::vector<unsigned> ps; /* the properties */
 
   unsigned num_comparisons = k * (k - 1) / 2;
 
@@ -715,7 +712,7 @@ static void witness(int kin, aiger *&k_witness_model) {
   /* construct R(L^0)...R(L^{k-1}) */
   L4 << "constructing R0... Rk-1";
   for (unsigned i = 0; i < k; i++) {
-    std::vector<unsigned> *latch_reset_equivs = new std::vector<unsigned>();
+    std::vector<unsigned> latch_reset_equivs;
 
     unsigned complement = k - 1 - i;
     /* L_i_begin: latch literal */
@@ -733,19 +730,19 @@ static void witness(int kin, aiger *&k_witness_model) {
       current_index += 2;
       aiger_add_and(k_witness_model, current_index, current_index - 3,
                     current_index - 1);
-      latch_reset_equivs->push_back(current_index);
+      latch_reset_equivs.push_back(current_index);
       current_index += 2;
     }
-    unsigned prev = latch_reset_equivs->at(0);
+    unsigned prev = latch_reset_equivs.at(0);
     if (num_latches == 1) {
-      Rs->push_back(prev);
+      Rs.push_back(prev);
     } else {
 
-      for (unsigned i = 1; i < latch_reset_equivs->size(); i++) {
-        unsigned x = latch_reset_equivs->at(i);
+      for (unsigned i = 1; i < latch_reset_equivs.size(); i++) {
+        unsigned x = latch_reset_equivs.at(i);
         aiger_add_and(k_witness_model, current_index, prev, x);
-        if (i == latch_reset_equivs->size() - 1) {
-          Rs->push_back(current_index);
+        if (i == latch_reset_equivs.size() - 1) {
+          Rs.push_back(current_index);
         }
         prev = current_index;
         current_index += 2;
@@ -758,22 +755,22 @@ static void witness(int kin, aiger *&k_witness_model) {
   /* Resetting the model_latches */
   /* Resetting R_0 */
   /* R_or_1_to_k_1: V_{1,k-1} R^i, condition for Rp_0 (R'_0)*/
-  std::vector<int> *R_or_i_to_k_1s = new std::vector<int>;
-  assert(Rs->size() > 1);
-  unsigned prev = Rs->at(1);
+  std::vector<int> R_or_i_to_k_1s;
+  assert(Rs.size() > 1);
+  unsigned prev = Rs.at(1);
   /* the model is 2-inductive */
-  if (Rs->size() == 2) {
+  if (Rs.size() == 2) {
     R_or_1_to_k_1 = prev;
     current_index = prev + 2;
   } else {
     /* R_or_k_1_to_1 */
-    prev = Rs->at(Rs->size() - 1) + 1;
+    prev = Rs.at(Rs.size() - 1) + 1;
     for (unsigned i = k - 2; i != 0; i--) {
-      unsigned R_i = Rs->at(i);
+      unsigned R_i = Rs.at(i);
       aiger_add_and(k_witness_model, current_index, prev, R_i + 1);
       prev = current_index;
       current_index += 2;
-      R_or_i_to_k_1s->insert(R_or_i_to_k_1s->begin(), current_index - 1);
+      R_or_i_to_k_1s.insert(R_or_i_to_k_1s.begin(), current_index - 1);
     }
 
     R_or_1_to_k_1 = current_index - 1;
@@ -804,21 +801,21 @@ static void witness(int kin, aiger *&k_witness_model) {
 
     unsigned R_or_i_to_k_1;
     if (i != 1) {
-      unsigned prev = Rs->at(i) + 1;
+      unsigned prev = Rs.at(i) + 1;
       for (unsigned j = i + 1; j < k; j++) {
-        unsigned current_R = Rs->at(j);
+        unsigned current_R = Rs.at(j);
         aiger_add_and(k_witness_model, current_index, prev, current_R + 1);
         prev = current_index;
         current_index += 2;
       }
       // R_or_i_to_k_1 = current_index - 1;}
-      R_or_i_to_k_1 = R_or_i_to_k_1s->at(i - 1);
+      R_or_i_to_k_1 = R_or_i_to_k_1s.at(i - 1);
     } else {
       R_or_i_to_k_1 = R_or_1_to_k_1;
     }
 
     /* R'(L^{i-1}) */
-    std::vector<unsigned> *rp = new std::vector<unsigned>;
+    std::vector<unsigned> rp;
     for (unsigned j = 0; j < num_latches; j++) {
       aiger_symbol *current_latch = model_latches + j;
       unsigned original_lit = current_latch->lit;
@@ -836,13 +833,13 @@ static void witness(int kin, aiger *&k_witness_model) {
       current_index += 2;
       aiger_add_and(k_witness_model, current_index, current_index - 3,
                     current_index - 1);
-      rp->push_back(current_index);
+      rp.push_back(current_index);
       current_index += 2;
     }
 
-    prev = rp->at(0);
+    prev = rp.at(0);
     for (unsigned j = 1; j < num_latches; j++) {
-      aiger_add_and(k_witness_model, current_index, prev, rp->at(j));
+      aiger_add_and(k_witness_model, current_index, prev, rp.at(j));
       prev = current_index;
       current_index += 2;
     }
@@ -878,8 +875,8 @@ static void witness(int kin, aiger *&k_witness_model) {
   }
 
   /* Reset R^{k-1} */
-  unsigned R_k_1 = Rs->at(k - 1);
-  std::vector<unsigned> *rp = new std::vector<unsigned>;
+  unsigned R_k_1 = Rs.at(k - 1);
+  std::vector<unsigned> rp;
   for (unsigned j = 0; j < num_latches; j++) {
     aiger_symbol *current_latch = model_latches + j;
     unsigned original_lit = current_latch->lit;
@@ -894,13 +891,13 @@ static void witness(int kin, aiger *&k_witness_model) {
     current_index += 2;
     aiger_add_and(k_witness_model, current_index, current_index - 3,
                   current_index - 1);
-    rp->push_back(current_index);
+    rp.push_back(current_index);
     current_index += 2;
   }
 
-  prev = rp->at(0);
+  prev = rp.at(0);
   for (unsigned j = 1; j < num_latches; j++) {
-    aiger_add_and(k_witness_model, current_index, prev, rp->at(j));
+    aiger_add_and(k_witness_model, current_index, prev, rp.at(j));
     prev = current_index;
     current_index += 2;
   }
@@ -938,17 +935,17 @@ static void witness(int kin, aiger *&k_witness_model) {
     unsigned complement = (k - 1) - i;
     unsigned b_i = B_k_1_begin + complement * 2;
     unsigned b_i_1 = B_k_1_begin + (complement + 1) * 2;
-    unsigned R_i = Rs->at(i);
+    unsigned R_i = Rs.at(i);
 
-    unsigned prev1 = neg(Rs->at(i + 1));
+    unsigned prev1 = neg(Rs.at(i + 1));
 
     // for(unsigned j=i+2; j<k; j++){
-    //   aiger_add_and(k_witness_model, current_index, prev1, neg(Rs->at(j)));
+    //   aiger_add_and(k_witness_model, current_index, prev1, neg(Rs.at(j)));
     //   prev1 = current_index;
     //   current_index += 2;
     // }
     // unsigned and_not_R_j = i==k-2? prev1: current_index-2;
-    unsigned and_not_R_j = i == k - 2 ? prev1 : neg(R_or_i_to_k_1s->at(i));
+    unsigned and_not_R_j = i == k - 2 ? prev1 : neg(R_or_i_to_k_1s.at(i));
 
     aiger_add_and(k_witness_model, current_index, R_i, and_not_R_j);
 
@@ -959,17 +956,17 @@ static void witness(int kin, aiger *&k_witness_model) {
     current_index += 2;
   }
   /* Reset b^0 */
-  // prev = Rs->at(1);
+  // prev = Rs.at(1);
   // prev = neg(prev);
   // for(unsigned i=2; i<k; i++){
-  //   unsigned R_i = Rs->at(i);
+  //   unsigned R_i = Rs.at(i);
   //   aiger_add_and(k_witness_model, current_index, prev, neg(R_i));
   //   prev = current_index;
   //   current_index += 2;
   // }
   // unsigned or_R = current_index-1;
   unsigned or_R = R_or_1_to_k_1;
-  if (k == 2) { or_R = Rs->at(1); }
+  if (k == 2) { or_R = Rs.at(1); }
   aiger_add_and(k_witness_model, current_index, or_R, 0);
   current_index += 2;
   aiger_add_and(k_witness_model, current_index, neg(or_R), 1);
@@ -1012,7 +1009,7 @@ static void witness(int kin, aiger *&k_witness_model) {
   }
   */
 
-  std::vector<unsigned> *p3s = new std::vector<unsigned>();
+  std::vector<unsigned> p3s;
   for (unsigned i = 0; i < k - 1; i++) {
     unsigned prev;
     // prev = sis->at(i);
@@ -1032,20 +1029,20 @@ static void witness(int kin, aiger *&k_witness_model) {
     }
     */
 
-    unsigned R_i_p_1 = Rs->at(i + 1);
+    unsigned R_i_p_1 = Rs.at(i + 1);
     unsigned R_i_p_1_ = R_i_p_1 % 2 ? R_i_p_1 - 1 : R_i_p_1 + 1;
     aiger_add_and(k_witness_model, current_index, current_index - 2, R_i_p_1_);
-    p3s->push_back(current_index + 1);
+    p3s.push_back(current_index + 1);
     current_index += 2;
   }
 
   /* p0:  b^i -> b^{i+1} for i in 0...k-2 */
-  std::vector<unsigned> *b_i_i_1 = new std::vector<unsigned>();
+  std::vector<unsigned> b_i_i_1;
   if (k == 2) {
     unsigned b_0 = B_k_1_begin + 2;
     aiger_add_and(k_witness_model, current_index, b_0, neg(B_k_1_begin));
     current_index += 2;
-    ps->push_back(current_index - 1);
+    ps.push_back(current_index - 1);
   } else {
     for (unsigned i = 0; i < k - 1; i++) {
       unsigned complement = (k - 1) - i;
@@ -1073,28 +1070,28 @@ static void witness(int kin, aiger *&k_witness_model) {
       */
       // or simply, bis=b_i-1;
       aiger_add_and(k_witness_model, current_index, b_i, bis);
-      b_i_i_1->push_back(current_index + 1);
+      b_i_i_1.push_back(current_index + 1);
       current_index += 2;
     }
     /* constructing p0 */
-    assert(b_i_i_1->size() == k - 1);
-    prev = b_i_i_1->at(0);
+    assert(b_i_i_1.size() == k - 1);
+    prev = b_i_i_1.at(0);
     for (unsigned i = 1; i < k - 1; i++) {
-      unsigned index = b_i_i_1->at(i);
+      unsigned index = b_i_i_1.at(i);
       aiger_add_and(k_witness_model, current_index, prev, index);
       prev = current_index;
       current_index += 2;
     }
-    ps->push_back(current_index - 2);
+    ps.push_back(current_index - 2);
   }
 
   /* p1: b^i -> h^i, for i in 1..k-1 */
-  std::vector<unsigned> *p1s = new std::vector<unsigned>();
+  std::vector<unsigned> p1s;
   for (unsigned i = 0; i < k - 1; i++) {
     unsigned complement = (k - 1) - i;
     unsigned b_i = B_k_1_begin + complement * 2;
 
-    std::vector<unsigned> *h_ls = new std::vector<unsigned>();
+    std::vector<unsigned> h_ls;
     for (unsigned j = 0; j < num_latches; j++) {
       aiger_symbol *original_latch = model_latches + j;
       unsigned l =
@@ -1112,77 +1109,77 @@ static void witness(int kin, aiger *&k_witness_model) {
       current_index += 2;
       aiger_add_and(k_witness_model, current_index, current_index - 3,
                     current_index - 1);
-      h_ls->push_back(current_index);
+      h_ls.push_back(current_index);
       current_index += 2;
     }
-    prev = h_ls->at(0);
+    prev = h_ls.at(0);
     // TODO this can't be right
     for (unsigned i = 1; i < num_latches; i++) {
-      unsigned index = h_ls->at(i);
+      unsigned index = h_ls.at(i);
       aiger_add_and(k_witness_model, current_index, prev, index);
       prev = current_index;
       current_index += 2;
     }
     /* b^i ^ !h^i*/
     aiger_add_and(k_witness_model, current_index, b_i, current_index - 1);
-    p1s->push_back(current_index + 1);
+    p1s.push_back(current_index + 1);
     current_index += 2;
   }
 
   /* p1 */
-  prev = p1s->at(0);
-  if (p1s->size() == 1) {
-    ps->push_back(prev);
+  prev = p1s.at(0);
+  if (p1s.size() == 1) {
+    ps.push_back(prev);
   } else {
     for (unsigned i = 1; i < k - 1; i++) {
-      unsigned index = p1s->at(i);
+      unsigned index = p1s.at(i);
       aiger_add_and(k_witness_model, current_index, prev, index);
       prev = current_index;
       current_index += 2;
     }
-    ps->push_back(current_index - 2);
+    ps.push_back(current_index - 2);
   }
 
   L4 << "p1 set";
   /* p2: b^i -> p^i */
-  std::vector<unsigned> *p2s = new std::vector<unsigned>();
+  std::vector<unsigned> p2s;
   for (unsigned i = 0; i < k; i++) {
     unsigned complement = (k - 1) - i;
     unsigned b_i = B_k_1_begin + complement * 2;
     unsigned p_i = mapping_old_index_to_k_witness_circuit(original_p, i);
     aiger_add_and(k_witness_model, current_index, b_i, neg(p_i));
-    p2s->push_back(current_index + 1);
+    p2s.push_back(current_index + 1);
     current_index += 2;
   }
   /* p2 */
-  prev = p2s->at(0);
+  prev = p2s.at(0);
   for (unsigned i = 1; i < k; i++) {
-    unsigned index = p2s->at(i);
+    unsigned index = p2s.at(i);
     aiger_add_and(k_witness_model, current_index, prev, index);
     prev = current_index;
     current_index += 2;
   }
-  ps->push_back(current_index - 2);
+  ps.push_back(current_index - 2);
   L4 << "p2 set";
 
   /* p3 */
-  prev = p3s->at(0);
-  if (p3s->size() == 1) {
-    ps->push_back(prev);
+  prev = p3s.at(0);
+  if (p3s.size() == 1) {
+    ps.push_back(prev);
   } else {
     for (unsigned i = 1; i < k - 1; i++) {
-      unsigned index = p3s->at(i);
+      unsigned index = p3s.at(i);
       aiger_add_and(k_witness_model, current_index, prev, index);
       prev = current_index;
       current_index += 2;
     }
-    ps->push_back(current_index - 2);
+    ps.push_back(current_index - 2);
   }
 
   /* p' = p1...p3 */
-  prev = ps->at(0);
-  for (unsigned i = 1; i < ps->size(); i++) {
-    unsigned index = ps->at(i);
+  prev = ps.at(0);
+  for (unsigned i = 1; i < ps.size(); i++) {
+    unsigned index = ps.at(i);
     aiger_add_and(k_witness_model, current_index, prev, index);
     prev = current_index;
     current_index += 2;
