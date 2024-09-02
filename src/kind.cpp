@@ -13,7 +13,6 @@
 
 static aiger *model;
 
-static int ncs, dcs, rcs;
 // aigcertify_kind
 aiger *k_witness_model;
 unsigned k;
@@ -126,7 +125,9 @@ unsigned map_to_next(unsigned l) {
 }
 
 static void witness(int kin, aiger *&k_witness_model) {
-  assert(false);
+  assert(!model->num_constraints);
+  for (auto [l, r] : latches(model) | resets)
+    assert(r < 2 || r == l);
   k = kin;
   if (k < 2) {
     k_witness_model = model;
@@ -187,6 +188,7 @@ static void witness(int kin, aiger *&k_witness_model) {
   /* adding original set of inputs */
   for (unsigned i = 0; i < num_inputs; i++) {
     aiger_add_input(k_witness_model, (i + 1) * 2, "");
+    simulates(k_witness_model, (i + 1) * 2, (i + 1) * 2);
   }
 
   /* adding k-1 copies of inputs, as model_latches */
@@ -216,6 +218,10 @@ static void witness(int kin, aiger *&k_witness_model) {
         mapping_old_index_to_k_witness_circuit(current_latch->next, k - 1);
     L5 << "adding" << latch_index << "with next" << next;
     aiger_add_latch(k_witness_model, latch_index, next, "");
+    L5 << "and reset" << reset;
+    simulates(k_witness_model, current_latch->lit, latch_index);
+    // simulates(int *witness, unsigned int model_lit, unsigned int
+    // witness_lit);
   }
 
   L4 << "added L^{k-1}";
@@ -506,7 +512,8 @@ static void witness(int kin, aiger *&k_witness_model) {
         mapping_old_index_to_k_witness_circuit(original_lit, k - 2);
     aiger_symbol *L_i_1_latch = aiger_is_latch(k_witness_model, L_i_1_lit);
     // assert(L_i_1_latch->lit == L_i_1_lit);
-    unsigned L_i_1_reset = L_i_1_latch->reset;
+    unsigned L_i_1_reset =
+        mapping_old_index_to_k_witness_circuit(L_i_1_latch->reset, k - 1);
     aiger_add_and(k_witness_model, current_index, L_i_1_lit, neg(L_i_1_reset));
     current_index += 2;
     aiger_add_and(k_witness_model, current_index, L_i_1_lit + 1, L_i_1_reset);
@@ -544,7 +551,9 @@ static void witness(int kin, aiger *&k_witness_model) {
                   current_index - 1);
 
     // aiger_add_reset(k_witness_model, l, current_index+1);
-    aiger_add_reset(k_witness_model, l, current_latch->reset);
+    unsigned reset =
+        mapping_old_index_to_k_witness_circuit(current_latch->reset, k - 1);
+    aiger_add_reset(k_witness_model, l, reset);
     current_index += 2;
   }
 
@@ -818,45 +827,6 @@ static void witness(int kin, aiger *&k_witness_model) {
     aiger_add_constraint(k_witness_model, (model->constraints + i)->lit, "");
   }
 
-  if (dcs | rcs) {
-    std::vector<unsigned> unique, differs;
-    unique.reserve((k * (k - 1)) / 2);
-    differs.reserve(num_latches);
-    for (int i = 1; i < k; ++i) {
-      for (int j = 0; j < i; ++j) {
-        differs.clear(); // usually maintains capacity
-        for (int l = 0; l < model->num_latches; ++l) {
-          aiger_symbol *latch = model->latches + l;
-          unsigned lit_i =
-              mapping_old_index_to_k_witness_circuit(latch->lit, i); // L_i
-          unsigned lit_j =
-              mapping_old_index_to_k_witness_circuit(latch->lit, j); // L_j
-          unsigned inj = conj(k_witness_model, lit_i, neg(lit_j));
-          unsigned nij = conj(k_witness_model, neg(lit_i), lit_j);
-          differs.push_back(disj(k_witness_model, inj, nij));
-        }
-        unique.push_back(conj(k_witness_model, differs));
-      }
-    }
-    assert(unique.size() == (k * (k - 1)) / 2);
-    unsigned uniqueness = conj(k_witness_model, unique);
-    aiger_add_constraint(k_witness_model, uniqueness, "uniqueness");
-  }
-
-  // add mapping
-  static constexpr unsigned MAX_SIZE = 12;
-
-  for (unsigned i = 0; i < num_latches; i++) {
-    aiger_symbol *current_latch = model_latches + i;
-    unsigned latch_index =
-        mapping_old_index_to_k_witness_circuit(current_latch->lit, k - 1);
-    aiger_symbol *latch = aiger_is_latch(k_witness_model, latch_index);
-    assert(latch);
-    latch->name = static_cast<char *>(malloc(MAX_SIZE));
-    assert(latch->name);
-    std::snprintf(latch->name, MAX_SIZE, "= %d", current_latch->lit);
-  }
-
   aiger_add_output(k_witness_model, w_output, "");
   aiger_reencode(k_witness_model);
 }
@@ -920,24 +890,16 @@ void unique_witness(int kin, aiger *&witness) {
 }
 
 bool kind(aiger *aig, aiger *&k_witness_model,
-          std::vector<std::vector<unsigned>> &cex, unsigned simple_path) {
-  LV4(simple_path);
-  if (simple_path == 0)
-    ncs = 1;
-  else if (simple_path == 1)
-    dcs = 1;
-  else if (simple_path == 2)
-    rcs = 1;
-  else
-    assert(false);
-  model = aig;
-
+          std::vector<std::vector<unsigned>> &cex, unsigned simple_path,
+          bool always_unique) {
   auto [bug, k] = mcaiger(aig, simple_path);
-  if (bug) stimulus(k, cex);
-  // else if (!simple_path)
-  //   witness(k, k_witness_model);
-  else
+  model = aig;
+  if (bug)
+    stimulus(k, cex);
+  else if (simple_path || always_unique)
     unique_witness(k, k_witness_model);
+  else
+    witness(k, k_witness_model);
   mcaiger_free();
 
   return bug;

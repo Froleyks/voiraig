@@ -4,4 +4,6 @@
 
 #include <vector>
 
-bool kind(aiger *model, aiger *&witness, std::vector<std::vector<unsigned>> &cex, unsigned simple_path);
+bool kind(aiger *aig, aiger *&k_witness_model,
+          std::vector<std::vector<unsigned>> &cex, unsigned simple_path,
+          bool always_unique);

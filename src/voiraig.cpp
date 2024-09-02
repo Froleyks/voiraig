@@ -17,7 +17,7 @@ int main(int argc, char *argv[]) {
   bool bug;
   aiger *witness{};
   if (options.kind)
-    bug = kind(*model, witness, cex, options.paths);
+    bug = kind(*model, witness, cex, options.paths, options.unique);
   else
     bug = ic3(*model, cex);
   if (bug) {
