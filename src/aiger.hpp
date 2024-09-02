@@ -37,7 +37,11 @@ unsigned output(const aiger *aig);
 
 unsigned size(const aiger *aig);
 
-unsigned input(aiger *aig);
+unsigned input(aiger *aig, const char *name = nullptr);
+unsigned oracle(aiger *aig);
+unsigned latch(aiger *aig, const char *name = nullptr);
+
+void simulates(aiger *witness, unsigned model_lit, unsigned witness_lit);
 
 unsigned conj(aiger *aig, unsigned x, unsigned y);
 unsigned conj(aiger *aig, std::vector<unsigned> &v);

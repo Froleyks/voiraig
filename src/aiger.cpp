@@ -54,11 +54,30 @@ unsigned output(const aiger *aig) {
 
 unsigned size(const aiger *aig) { return (aig->maxvar + 1) * 2; }
 
-unsigned input(aiger *aig) {
+unsigned input(aiger *aig, const char *name) {
   const unsigned new_var{size(aig)};
-  aiger_add_input(aig, new_var, nullptr);
+  aiger_add_input(aig, new_var, name);
   assert(size(aig) != new_var);
   return new_var;
+}
+unsigned oracle(aiger *aig) { return input(aig, "oracle"); }
+unsigned latch(aiger *aig, const char *name) {
+  const unsigned new_var{size(aig)};
+  aiger_add_latch(aig, new_var, new_var, name);
+  assert(size(aig) != new_var);
+  return new_var;
+}
+
+void simulates(aiger *witness, unsigned model_lit, unsigned witness_lit) {
+  L4 << witness_lit << "simulates" << model_lit;
+  assert(model_lit != INVALID_LIT && witness_lit != INVALID_LIT);
+  static constexpr unsigned MAX_NAME_SIZE = 14;
+  aiger_symbol *l = aiger_is_input(witness, witness_lit);
+  if (!l) l = aiger_is_latch(witness, witness_lit);
+  assert(l);
+  l->name = static_cast<char *>(malloc(MAX_NAME_SIZE));
+  assert(l->name);
+  std::snprintf(l->name, MAX_NAME_SIZE, "= %d", model_lit);
 }
 
 unsigned conj(aiger *aig, unsigned x, unsigned y) {
@@ -126,7 +145,6 @@ std::span<aiger_and> ands(const aiger *aig) {
 std::span<aiger_symbol> constraints(const aiger *aig) {
   return {aig->constraints, aig->num_constraints};
 }
-
 
 bool inputs_latches_reencoded(aiger *aig) {
   unsigned v{2};
