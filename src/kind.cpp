@@ -893,6 +893,7 @@ bool kind(aiger *aig, aiger *&k_witness_model,
           std::vector<std::vector<unsigned>> &cex, unsigned simple_path,
           bool always_unique) {
   auto [bug, k] = mcaiger(aig, simple_path);
+  L0 << "k: " << k << '\n';
   model = aig;
   if (bug)
     stimulus(k, cex);
