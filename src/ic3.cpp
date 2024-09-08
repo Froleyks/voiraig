@@ -117,9 +117,9 @@ public:
     assert(model);
     solver = new CaDiCaL::Solver();
     // TODO only on demand
-    initialize(model, solver);
     B = output(model);
     C = conj(model, constraints(model) | lits);
+    initialize(model, solver);
   }
   bool intersects(const Cube &c) {
     // TODO do I need to minimize here?
