@@ -110,16 +110,18 @@ public:
   // -n for deleted cubes
   // Each cube is also blocked in all previous frames.
   std::vector<Cube> cubes;
-  unsigned B;
-  unsigned C;
+  unsigned B, C = 1;
   CaDiCaL::Solver *solver;
   Frame(aiger *model) {
     assert(model);
     solver = new CaDiCaL::Solver();
     // TODO only on demand
     B = output(model);
-    C = conj(model, constraints(model) | lits);
-    initialize(model, solver);
+    if (model->num_constraints) {
+      C = model->constraints[0].lit;
+      solver->add(SAT(C));
+      solver->add(0);
+    }
   }
   bool intersects(const Cube &c) {
     // TODO do I need to minimize here?
@@ -159,11 +161,11 @@ void addBlockedCube(std::vector<Frame> &frames, const Cube c, unsigned k) {
 Cube bad(aiger *model, Frame &f, bool minimize = true) {
   L3 << "searching for bad";
   f.solver->assume(SAT(f.B));
-  f.solver->assume(SAT(f.C));
   const int res = f.solver->solve();
   if (res == 20) return bot;
   assert(res == 10);
   if (!minimize) return cube(model, f.solver);
+  L5 << "found bad" << cube(model, f.solver);
   std::vector<ternary> s(model->maxvar + 1);
   assert(aiger_is_reencoded(model));
   for (unsigned i = 0; i < model->num_inputs + model->num_latches + 1; ++i)
@@ -174,7 +176,7 @@ Cube bad(aiger *model, Frame &f, bool minimize = true) {
   assert(s[IDX(f.B)] == STX(f.B));
 #endif
 
-  Cube b = reduce(model, {f.B}, s);
+  Cube b = reduce(model, {f.B, f.C}, s);
 
   L3 << "return" << b;
 #ifndef NDEBUG
@@ -190,7 +192,9 @@ Cube predecessor(aiger *model, Frame &f, Cube &b, Frame &f0, bool minA = true) {
   // TODO if cadical only reconstructs the model on val, it might be benefical
   // to split the return of a from the SAT query.
   std::vector<unsigned> bNext;
-  bNext.reserve(b.size());
+  bNext.reserve(b.size() + 1);
+  if (model->num_constraints) { bNext.push_back(model->constraints[0].lit); }
+
   for (unsigned g : b) {
     const int i = (g - model->latches[0].lit) >> 1;
     const aiger_symbol *latch = model->latches + i;
@@ -209,7 +213,6 @@ Cube predecessor(aiger *model, Frame &f, Cube &b, Frame &f0, bool minA = true) {
     f.solver->assume(sat);
     if (constrain) f.solver->constrain(SAT(NOT(g)));
   }
-  f.solver->assume(SAT(f.C));
   if (constrain && b.size()) f.solver->constrain(0);
   assert(bNext.size() <= model->num_latches);
   const int res = f.solver->solve();
@@ -344,6 +347,11 @@ int forwardCubes(aiger *model, std::vector<Frame> &frames) {
 }
 
 bool ic3(aiger *model, std::vector<std::vector<unsigned>> &cex) {
+  if (model->num_constraints > 1) {
+    unsigned C = conj(model, constraints(model) | lits);
+    model->constraints[0].lit = C;
+    model->num_constraints = 1;
+  }
   std::vector<Frame> frames;
   L2 << "appending frame" << frames.size();
   frames.emplace_back(model);
