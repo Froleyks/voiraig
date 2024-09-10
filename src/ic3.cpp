@@ -117,11 +117,13 @@ public:
     solver = new CaDiCaL::Solver();
     // TODO only on demand
     B = output(model);
+    LV5(B);
     if (model->num_constraints) {
       C = model->constraints[0].lit;
       solver->add(SAT(C));
       solver->add(0);
     }
+    initialize(model, solver);
   }
   bool intersects(const Cube &c) {
     // TODO do I need to minimize here?
@@ -159,7 +161,7 @@ void addBlockedCube(std::vector<Frame> &frames, const Cube c, unsigned k) {
 }
 
 Cube bad(aiger *model, Frame &f, bool minimize = true) {
-  L3 << "searching for bad";
+  L3 << "searching for bad, assuming" << SAT(f.B);
   f.solver->assume(SAT(f.B));
   const int res = f.solver->solve();
   if (res == 20) return bot;
@@ -214,7 +216,7 @@ Cube predecessor(aiger *model, Frame &f, Cube &b, Frame &f0, bool minA = true) {
     if (constrain) f.solver->constrain(SAT(NOT(g)));
   }
   if (constrain && b.size()) f.solver->constrain(0);
-  assert(bNext.size() <= model->num_latches);
+  assert(bNext.size() <= model->num_latches + 1);
   const int res = f.solver->solve();
   if (res == 20) {
     L3 << "no prdecessor for" << b;
