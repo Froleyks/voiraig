@@ -166,13 +166,9 @@ void parse_options(int argc, char **argv, struct options *opts) {
     else if (!strcmp(opt, "--range")) print_option_ranges(), exit(0);
     else if (opt[0] == '-' && opt[1])
         die("invalid option '%s' (try '-h')", opt);
-    else if (opts->witness) die("too many arguments");
-    else if (opts->model) {
-      if (!strcmp(opt, "-"))
-        opts->witness = "";
-      else
-        opts->witness = opt;
-    }
+    else if (opts->witness_uns) die("too many arguments");
+    else if (opts->witness_sat) opts->witness_uns = opt;
+    else if (opts->model) opts->witness_sat = opt;
     else {
       if (has_suffix(opt, ".bz2") || has_suffix(opt, ".gz") ||
           has_suffix(opt, ".xz")) {
@@ -181,7 +177,9 @@ void parse_options(int argc, char **argv, struct options *opts) {
       opts->model = opt;
     }
   }
-  if (!opts->model) { die(compact_usage.c_str()); }
+  if (!opts->model) die(compact_usage.c_str());
+  if (!opts->witness_sat) opts->witness_sat = "";
+  if (!opts->witness_uns) opts->witness_uns = opts->witness_sat;
 }
 
 static const char *bool_to_string(bool value) {

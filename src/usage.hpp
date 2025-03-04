@@ -4,7 +4,7 @@
 
 static std::string compact_usage =
 
-"usage: voraig [ <option> ... ] [ <model> [ <witness> ] ]\n"
+"usage: voraig [ <option> ... ] [ <model> <counter_example> <witness_circuit> ]\n"
 "\n"
 "where '<option>' is one of the following\n"
 "\n"

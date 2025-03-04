@@ -42,7 +42,8 @@ struct options {
   OPTIONS
 #undef OPTION
   const char *model;
-  const char *witness;
+  const char *witness_sat;
+  const char *witness_uns;
 };
 
 /*------------------------------------------------------------------------*/
