@@ -22,8 +22,7 @@ int main(int argc, char *argv[]) {
     bug = ic3(*model, cex);
   if (bug) {
     if (options.trace) write_witness(*model, cex, options.witness_sat);
-    L0 << "exit 10\n";
-    return 10;
+    L0 << "RESULT: SAT\n";
   } else {
     if (options.certificate) {
       if (witness)
@@ -32,7 +31,6 @@ int main(int argc, char *argv[]) {
         write_witness(*model, options.witness_uns);
     }
     if (witness && witness != *model) aiger_reset(witness);
-    L0 << "exit 20\n";
-    return 20;
+    L0 << "RESULT: UNSAT\n";
   }
 }

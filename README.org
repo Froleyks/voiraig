@@ -1,1 +1,9 @@
-#+title: Voiraig - Certifying Bit Level Model Checker
+* Voiraig - Certifying Bit Level Model Checker
+# #+html: <img src="logo.webp" width="250px" align="right"/>
+
+** Quickstart
+#+begin_src sh
+git clone https://github.com/Froleyks/voiraig
+make -C voiraig
+./voiraig/bin/voiraig
+#+end_src

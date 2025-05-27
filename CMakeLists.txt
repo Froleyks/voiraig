@@ -1,105 +1,37 @@
-cmake_minimum_required(VERSION 3.16.3)
-project(voiraig)
-
+cmake_minimum_required(VERSION 3.10)
+project(voiraig VERSION 0.0.1)
+set(CMAKE_CXX_STANDARD 23)
 file(GLOB headers CONFIGURE_DEPENDS src/*.hpp)
 file(GLOB sources CONFIGURE_DEPENDS src/*.cpp)
 
-# Options:
 option(LOG "Enable Logging" OFF)
+option(CHECK "Setup checking and fuzzing" OFF)
+option(ASAN "Build with address sanitizer" OFF)
 option(LTO "Enable Link-Time Optimization" ON)
-option(GIT "Automatically download dependencies" ON)
-option(CHECK "Setup checking and fuzzing" ON)
-option(Static "Link static binary" OFF)
-
-set(AIGER_DIR ${CMAKE_CURRENT_LIST_DIR}/aiger CACHE PATH "aiger directory")
-set(CADICAL_DIR ${CMAKE_CURRENT_LIST_DIR}/cadical CACHE PATH "CaDiCaL directory")
-set(CERTIFAIGER_DIR ${CMAKE_CURRENT_LIST_DIR}/certifaiger CACHE PATH
-                                                                "certifaiger directory")
+option(STATIC "Build static binary" OFF)
+include(util.cmake)
+include(deps/aiger/aiger_lib.cmake)
+include(deps/cadical/cadical_lib.cmake)
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
   set(LOG ON CACHE BOOL "Enable Logging" FORCE)
 endif()
-
-# Compile flags:
-set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
-if(LTO)
-  set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
-endif(LTO)
+set(CMAKE_CXX_FLAGS_FUZZING "-O3" CACHE STRING "Flags for fuzzing build type" FORCE)
 if(LOG)
   add_compile_definitions("LOG")
 endif(LOG)
-set(CMAKE_CXX_FLAGS_FUZZING "-O3" CACHE STRING "Flags for fuzzing build type" FORCE)
-
-# Dependencies:
-function(git_submodule)
-  file(GLOB DIR_CONTENTS ${CMAKE_CURRENT_LIST_DIR}/${ARGV0}/*)
-  if(GIT AND DIR_CONTENTS STREQUAL "")
-    find_package(Git QUIET)
-    execute_process(COMMAND ${GIT_EXECUTABLE} submodule update --init --recursive ${ARGV0}
-                    WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR} RESULT_VARIABLE GIT_RES)
-    if(NOT GIT_RES EQUAL "0")
-      message(
-        FATAL_ERROR
-          "git submodule update --init --recursive failed with ${GIT_RES}, please checkout submodules"
-      )
-    endif()
-  endif()
-endfunction()
-
-git_submodule(cadical)
-include(ExternalProject)
-ExternalProject_Add(
-  CaDiCaL
-  PREFIX cadical
-  SOURCE_DIR ${CADICAL_DIR}
-  BUILD_IN_SOURCE 1
-  CONFIGURE_COMMAND ./configure
-  BUILD_COMMAND make -j
-  INSTALL_COMMAND cp build/libcadical.a <INSTALL_DIR> && make clean)
-add_library(cadical STATIC IMPORTED)
-set_target_properties(cadical PROPERTIES IMPORTED_LOCATION
-                                         ${CMAKE_BINARY_DIR}/cadical/libcadical.a)
-target_include_directories(cadical INTERFACE ${CADICAL_DIR}/src)
-
-if(NOT TARGET aiger)
-  git_submodule(aiger)
-  find_file(AIGER_SRC NAMES aiger.c PATHS ${AIGER_DIR})
-  if(NOT AIGER_SRC)
-    message(FATAL_ERROR "Aiger library not found in ${AIGER_DIR}.")
-  endif()
-  add_library(aiger STATIC ${AIGER_DIR}/aiger.c)
-  target_include_directories(aiger PUBLIC ${AIGER_DIR}/)
-endif()
-
 if(CHECK)
-  git_submodule(certifaiger)
-  add_subdirectory(${CERTIFAIGER_DIR})
+  include(deps/certifaiger/certifaiger_bin.cmake)
+endif(CHECK)
+add_executable(${PROJECT_NAME} ${sources})
+target_compile_options(${PROJECT_NAME} PRIVATE -DGITID="${GIT_ID}")
+target_compile_options(${PROJECT_NAME} PRIVATE -DVERSION="${PROJECT_VERSION}")
+install(TARGETS ${PROJECT_NAME})
+
+if(STATIC)
+  set(BUILD_SHARED_LIBS OFF)
+  set_target_properties(${PROJECT_NAME} PROPERTIES LINK_FLAGS "-static")
 endif()
 
-# Targets
-# # Format:
-add_custom_target(
-  format_${PROJECT_NAME}
-  COMMAND clang-format -i ${sources} ${headers} || echo "clang-format not installed"
-  COMMAND cmake-format -i ${CMAKE_CURRENT_LIST_FILE} || echo "cmake-format not installed"
-  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-  COMMENT "Formatting files")
-set_target_properties(format_${PROJECT_NAME} PROPERTIES EXCLUDE_FROM_ALL TRUE)
-
-# # Voiraig:
-file(READ "${CMAKE_CURRENT_LIST_DIR}/VERSION" VERSION)
-string(STRIP ${VERSION} VERSION)
-execute_process(COMMAND bash "-c" "git show|head -1|awk '{print $2}'"
-                OUTPUT_STRIP_TRAILING_WHITESPACE OUTPUT_VARIABLE GIT_ID)
-add_compile_definitions("VERSION=\"${VERSION}\"")
-add_compile_definitions("GITID=\"${GIT_ID}\"")
-
-add_executable(voiraig ${sources})
 target_link_libraries(voiraig aiger)
 target_link_libraries(voiraig cadical)
-if(STATIC)
-target_link_options(voiraig PRIVATE "-static")
-endif(STATIC)
-install(TARGETS voiraig)

@@ -1,9 +1,0 @@
-[submodule "aiger"]
-	path = aiger
-	url = https://github.com/Froleyks/aiger.git
-[submodule "certifaiger"]
-	path = certifaiger
-	url = https://github.com/Froleyks/certifaiger
-[submodule "cadical"]
-	path = cadical
-	url = https://github.com/arminbiere/cadical
