@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.10)
 project(cadical)
-file(GLOB sources CONFIGURE_DEPENDS src/*.cpp)
+file(GLOB sources CONFIGURE_DEPENDS src/*.cpp src/*.c)
 add_library(cadical STATIC ${sources})
 target_include_directories(cadical PUBLIC src)
 set_target_properties(cadical PROPERTIES PUBLIC_HEADER cadical.hpp)

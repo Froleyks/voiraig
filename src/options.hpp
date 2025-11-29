@@ -8,7 +8,7 @@
 
 // clang-format off
 // options have to be sorted!
-// <let ((beg (progn (next-line 3) (bol))) (end (progn (forward-paragraph) (point)))) (shell-command-on-region beg end "sort -k 2" t t) (align-regexp beg end "\\(,\\s-*\\) " 1 1 t)>
+// (let ((beg (progn (next-line 3) (point-at-bol))) (end (progn (forward-paragraph) (point)))) (shell-command-on-region beg end "sort -k 2" t t) (align-regexp beg end "\\(,\\s-*\\) " 1 1 t))
 //                     Name   Def Min Max Description
 #define OPTIONS \
   OPTION(bool,     certificate, 1, 0, 1, "produce witness circuit") \
