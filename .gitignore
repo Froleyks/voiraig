@@ -2,3 +2,4 @@ build
 fuzz
 debug
 bin
+/.cache/
