@@ -1,4 +1,10 @@
 MAKEFLAGS += --no-print-directory
+run: debug
+remote: fuzz/Makefile
+	@cmake --build fuzz --parallel
+	@cmake --install fuzz --prefix fuzz
+	printf "run:\n\t./certifuzzer ./voiraig 11\n" > fuzz/bin/Makefile
+	rsync -avz --progress fuzz/bin omega:voiraig
 all: build/Makefile
 	@cmake --build build --parallel
 	@cmake --install build --prefix .
