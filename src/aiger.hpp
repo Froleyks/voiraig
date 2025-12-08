@@ -69,12 +69,10 @@ std::span<aiger_symbol> constraints(const aiger *aig);
 
 static constexpr auto lits =
     std::views::transform([](const auto &l) { return l.lit; });
-static constexpr auto nexts = std::views::transform([](const auto &l) {
-  return std::pair{l.lit, l.next};
-});
-static constexpr auto resets = std::views::transform([](const auto &l) {
-  return std::pair{l.lit, l.reset};
-});
+static constexpr auto nexts = std::views::transform(
+    [](const auto &l) { return std::pair{l.lit, l.next}; });
+static constexpr auto resets = std::views::transform(
+    [](const auto &l) { return std::pair{l.lit, l.reset}; });
 static constexpr auto initialized =
     std::views::filter([](const auto &l) { return l.reset != l.lit; });
 static constexpr auto uninitialized =
@@ -87,25 +85,22 @@ struct InAIG {
   InAIG(const char *path, options *options = 0) : aig(aiger_init()) {
     const char *err = aiger_open_and_read_from_file(aig, path);
     L4 << "read" << path;
-    if (err) {
-      std::cerr << "certifaiger: parse error reading " << path << ": " << err
-                << "\n";
-      exit(1);
-    }
-    if (!inputs_latches_reencoded(aig)) {
-      std::cerr << "certifaiger: inputs and latches have to be reencoded even "
-                   "in ASCII format: "
-                << path << "\n";
-      exit(2);
-    }
-    if (aig->num_justice + aig->num_fairness) {
-      std::cerr
-          << "certifaiger: WARNING justice and fairness are not supported: "
-          << path << "\n";
-      exit(3);
-    }
+    auto invalid = [path, err](int code, const char *reason) {
+      std::cerr << "voiraig: " << reason << " " << path << ": " << err << "\n";
+      exit(code);
+    };
+    if (err) invalid(1, "parse error reading");
+    if (!inputs_latches_reencoded(aig))
+      invalid(2,
+              "inputs and latches have to be reencoded even in ASCII format:");
+    if (aig->num_justice) invalid(3, "justice constraints are not supported:");
+    if (aig->num_fairness > 1)
+      invalid(4, "multiple fairness constraints are not supported:");
+    if (aig->num_fairness + aig->num_bad + aig->num_outputs > 1)
+      invalid(5, "combination of safety and liveness not supported:");
+
     if (aig->num_bad + aig->num_outputs > 1)
-      std::cout << "certifaiger: WARNING Multiple properties. Using "
+      std::cout << "voiraig: WARNING Multiple properties. Using "
                 << (aig->num_bad ? "bad" : "output") << "0: " << path << "\n";
     unsigned embedded_options{};
     if (options) {
