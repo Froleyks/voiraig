@@ -3,6 +3,7 @@
 #include "cadical.hpp"
 #include "ic3.hpp"
 #include "kind.hpp"
+#include "k_liveness.hpp"
 #include "options.hpp"
 
 #include "utils.hpp"
@@ -16,10 +17,14 @@ int main(int argc, char *argv[]) {
   std::vector<std::vector<unsigned>> cex;
   bool bug;
   aiger *witness{};
-  if (options.kind)
+
+  if ((*model)->num_fairness)
+    bug = k_liveness(*model, witness, cex);
+  else if (options.kind)
     bug = kind(*model, witness, cex, options.paths, options.unique);
   else
     bug = ic3(*model, cex);
+
   if (bug) {
     if (options.trace) write_witness(*model, cex, options.witness_sat);
     std::cout << "sat\n";

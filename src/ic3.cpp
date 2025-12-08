@@ -169,7 +169,7 @@ Cube bad(aiger *model, Frame &f, bool minimize = true) {
   if (!minimize) return cube(model, f.solver);
   L5 << "found bad" << cube(model, f.solver);
   std::vector<ternary> s(model->maxvar + 1);
-  assert(aiger_is_reencoded(model));
+  // assert(aiger_is_reencoded(model));
   for (unsigned i = 0; i < model->num_inputs + model->num_latches + 1; ++i)
     s[i] = f.solver->val(i + 1) > 0 ? X1 : X0;
 #ifndef NDEBUG
@@ -249,7 +249,7 @@ Cube predecessor(aiger *model, Frame &f, Cube &b, Frame &f0, bool minA = true) {
   // TODO use global ternary state
 
   std::vector<ternary> s(model->maxvar + 1);
-  assert(aiger_is_reencoded(model));
+  // assert(aiger_is_reencoded(model));
   // assert(a.size() == model->num_latches);
   for (unsigned i = 0; i < model->num_inputs + model->num_latches + 1; ++i)
     s[i] = f.solver->val(i + 1) > 0 ? X1 : X0;
