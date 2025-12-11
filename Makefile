@@ -15,6 +15,7 @@ fuzz: fuzz/Makefile
 debug: debug/Makefile
 	@cmake --build debug --parallel
 	@cmake --install debug --prefix .
+	ln -s debug/compile_commands.json .
 	./bin/certified 'valgrind ./bin/voiraig --verbosity=5' fuzz/bug.aag fuzz/wit.aag
 build/Makefile: CMakeLists.txt
 	cmake -DCMAKE_BUILD_TYPE=Release -DSTATIC=ON -B build
