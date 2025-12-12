@@ -172,9 +172,11 @@ Cube bad(aiger *model, Frame &f, bool minimize = true) {
   // assert(aiger_is_reencoded(model));
   for (unsigned i = 0; i < model->num_inputs + model->num_latches + 1; ++i)
     s[i] = f.solver->val(i + 1) > 0 ? X1 : X0;
+  L5 << s;
 #ifndef NDEBUG
   L3 << "sanity check simulation";
   propagate(model->ands, model->num_ands, s);
+  L5 << "f.B" << f.B << "stx" << (int)STX(f.B) << "val" << (int)s[IDX(f.B)];
   assert(s[IDX(f.B)] == STX(f.B));
 #endif
 

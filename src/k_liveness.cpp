@@ -1,5 +1,7 @@
 #include "k_liveness.hpp"
 
+#include "aiger.h"
+#include "aiger.hpp"
 #include "ic3.hpp"
 #include "utils.hpp"
 
@@ -9,78 +11,104 @@
 #include <cstring>
 #include <vector>
 
-namespace {
-// Keep the old literal order and structure, drop fairness.
-aiger *clone_base(aiger *model) {
-  auto *safe = aiger_init();
-  for (auto &i : inputs(model)) aiger_add_input(safe, i.lit, i.name);
+// Build a safety instance where the fairness literal may be violated at most
+// 'k' times. The (k+1)th violation triggers bad.
+aiger *build_safety_instance(aiger *model, unsigned k) {
+  L3 << "building safety instance for k =" << k;
+  if (k > 4) exit(0); // TEMP
+  std::vector<unsigned> map(size(model), INVALID_LIT);
+  auto m = [&map](unsigned from, unsigned to) {
+    assert(map[from] == INVALID_LIT);
+    assert(from != INVALID_LIT && to != INVALID_LIT);
+    map[from] = to;
+    map[aiger_not(from)] = aiger_not(to);
+  };
+  m(0, 0);
+  auto *safety = aiger_init();
+  for (auto &i : inputs(model))
+    m(i.lit, input(safety));
+  for (auto &l : latches(model))
+    m(l.lit, latch(safety));
+
+  // add new extra lives
+  std::vector<unsigned> lives;
+  lives.reserve(k);
+  for (int i = 0; i < k; ++i)
+    lives.push_back(latch(safety));
+  L4 << "added extra lives" << lives;
+
+  for (auto [a, x, y] : ands(model)) {
+    L5 << "and" << a << "=" << x << "&" << y;
+    assert(map[a] == INVALID_LIT);
+    assert(map[x] != INVALID_LIT);
+    assert(map[y] != INVALID_LIT);
+    m(a, conj(safety, map[x], map[y]));
+  }
+  // add back original latch transition and reset
   for (auto &l : latches(model)) {
-    aiger_add_latch(safe, l.lit, l.next, l.name);
-    aiger_add_reset(safe, l.lit, l.reset);
+    aiger_symbol *sl = aiger_is_latch(safety, map[l.lit]);
+    assert(sl);
+    assert(map[l.reset] != INVALID_LIT);
+    assert(map[l.next] != INVALID_LIT);
+    sl->reset = map[l.reset];
+    sl->next = map[l.next];
   }
-  for (auto &c : constraints(model)) aiger_add_constraint(safe, c.lit, c.name);
-  for (auto &a : ands(model))
-    aiger_add_and(safe, a.lhs, a.rhs0, a.rhs1);
-  return safe;
+  for (auto &c : constraints(model)) {
+    assert(map[c.lit] != INVALID_LIT);
+    aiger_add_constraint(safety, map[c.lit], c.name);
+  }
+
+  const unsigned Q = aiger_not(map[model->justice[0].lits[0]]);
+  assert(Q != INVALID_LIT);
+
+  for (int i = 0; i < k; ++i) {
+    aiger_symbol *l = aiger_is_latch(safety, lives[i]);
+    assert(l);
+    l->reset = 1;
+    l->next = conj(safety, lives[i], disj(safety, Q, i ? lives[i - 1] : 0));
+  }
+
+  unsigned P = k ? disj(safety, lives.back(), Q) : Q;
+  L4 << "Reduced to safety property" << P;
+  aiger_add_bad(safety, aiger_not(P), "k-buffered");
+  return safety;
 }
 
-unsigned parse_k(const aiger_symbol &fair) {
-  const char *env = std::getenv("VOIRAIG_K_LIVENESS");
-  if (!env) env = std::getenv("VOIRAIG_K");
-  unsigned k{};
-  if (env) {
-    std::from_chars(env, env + std::strlen(env), k);
-    if (k) return k;
-  }
-  if (fair.name) {
-    const char *p = std::strchr(fair.name, '=');
-    if (p) std::from_chars(p + 1, fair.name + std::strlen(fair.name), k);
-    if (k) return k;
-  }
-  return 10; // conservative default
+bool build_cex(aiger *model, std::vector<std::vector<unsigned>> &safety_cex) {
+  return false;
 }
 
-void trim_cex(std::vector<std::vector<unsigned>> &cex, unsigned max_lit) {
-  for (auto &cube : cex) {
-    cube.erase(std::remove_if(cube.begin(), cube.end(),
-                              [max_lit](unsigned l) { return ABS(l) > max_lit; }),
-               cube.end());
-  }
-}
-} // namespace
+void build_witness(aiger *&witness, aiger *model, unsigned k) {}
+
+// namespace
 
 bool k_liveness(aiger *model, aiger *&witness,
                 std::vector<std::vector<unsigned>> &cex) {
+  L1 << "k-liveness";
   assert(model);
-  assert(model->num_fairness == 1);
-  const aiger_symbol &fair = model->fairness[0];
-  const unsigned k = std::max(1u, parse_k(fair));
-  LI2(k) << "k-liveness with k=" << k;
+  assert(model->num_justice == 1);
+  assert(model->justice[0].size == 1);
+  for (unsigned k = 0;; ++k) {
+    L2 << "k-liveness trial k =" << k;
+    aiger *safety = build_safety_instance(model, k);
 
-  aiger *safe = clone_base(model);
-  const unsigned original_max = 2 * model->maxvar + 1;
-
-  std::vector<unsigned> flps(k);
-  unsigned x = fair.lit;
-  for (size_t i = 0; i < flps.size(); ++i) {
-    flps[i] = size(safe);
-    aiger_add_latch(safe, flps[i], flps[i], "k-live");
-    aiger_add_reset(safe, flps[i], 0);
-    const unsigned out = disj(safe, x, flps[i]);
-    aiger_is_latch(safe, flps[i])->next = out;
-    x = conj(safe, x, flps[i]);
+    std::vector<std::vector<unsigned>> safety_cex;
+    const bool bug = ic3(safety, safety_cex);
+    aiger_reset(safety);
+    if (bug) {
+      L3 << "sat for k =" << k;
+      if (build_cex(model, safety_cex)) {
+        L3 << "liveness cex built for k =" << k;
+        cex.swap(safety_cex);
+        return true;
+      }
+    } else {
+      L3 << "unsat for k =" << k;
+      build_witness(witness, model, k);
+    }
   }
-
-  const unsigned bad = NOT(x);
-  aiger_add_bad(safe, bad, "k-liveness");
-
-  const bool bug = ic3(safe, cex);
-  trim_cex(cex, original_max);
-  if (bug) {
-    aiger_reset(safe);
-    witness = nullptr;
-  } else {
-    witness = safe;
-  }
-  return bug;
+  // Unreachable, but placate compilers.
+  assert(false);
+  witness = nullptr;
+  return true;
 }

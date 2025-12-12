@@ -18,7 +18,8 @@ int main(int argc, char *argv[]) {
   bool bug;
   aiger *witness{};
 
-  if ((*model)->num_fairness)
+
+  if ((*model)->num_justice)
     bug = k_liveness(*model, witness, cex);
   else if (options.kind)
     bug = kind(*model, witness, cex, options.paths, options.unique);

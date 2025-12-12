@@ -9,11 +9,10 @@ live_bit = int(argv[2])
 assert 0 <= live_bit < n
 
 v = 2
-I = [v]; v += 2
 L = []
 for _ in range(n):
     L.append(v); v += 2
-O = L[live_bit]
+J = L[live_bit]^1
 
 gates = []
 def gate(x, y):
@@ -26,7 +25,7 @@ def gate(x, y):
 
 # Ripple-carry add input
 Lnext = []
-carry = I[0]  # start with constant 1 to add one every step
+carry = 1
 inc_bits = []
 for bit in L:
     # XOR via (bit & ~carry) | (~bit & carry)
@@ -44,11 +43,10 @@ for inc in inc_bits:
 assert len(L) == len(Lnext) == n
 
 M = (v - 2) // 2
-print(f"aag {M} {len(I)} {len(L)} {1} {len(gates)}")
-for l in I:
-    print(l)
+print(f"aag {M} 0 {len(L)} 0 {len(gates)} 0 0 1 0")
 for l, n in zip(L, Lnext):
     print(f"{l} {n}")
-print(O)
+print("1") # size of the single justice constraint
+print(J)
 for a in gates:
     print(a)

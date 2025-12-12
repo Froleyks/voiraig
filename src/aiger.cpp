@@ -159,6 +159,44 @@ bool inputs_latches_reencoded(aiger *aig) {
   return true;
 }
 
+InAIG::InAIG(const char *path, options *options) : aig(aiger_init()) {
+  const char *err = aiger_open_and_read_from_file(aig, path);
+  L4 << "read" << path;
+  auto invalid = [path, err](int code, const char *reason) {
+    std::cerr << "voiraig: " << reason << " " << path << ": " << err << "\n";
+    exit(code);
+  };
+  if (err) invalid(1, "parse error reading");
+  if (!inputs_latches_reencoded(aig))
+    invalid(2, "inputs and latches have to be reencoded even in ASCII format:");
+  if (aig->num_fairness)
+    invalid(3, "global fairness constraints are not supported:");
+  if (aig->num_justice > 1)
+    invalid(4, "multiple justice constraints are not supported:");
+  if (aig->num_justice && aig->justice[0].size > 1)
+    invalid(5, "justice constraints greater than one are not supported:");
+  if (aig->num_justice + !!(aig->num_bad + aig->num_outputs) > 1)
+    invalid(6, "combination of safety and liveness not supported:");
+
+  if (aig->num_bad + aig->num_outputs > 1)
+    std::cout << "voiraig: WARNING Multiple properties. Using "
+              << (aig->num_bad ? "bad" : "output") << "0: " << path << "\n";
+  unsigned embedded_options{};
+  if (options) {
+    char **p, *str;
+    for (p = aig->comments; (str = *p); p++) {
+      if (*str != '-' || *(str + 1) != '-') continue;
+      embedded_options++;
+      parse_option_with_value(options, str);
+    }
+    LI2(embedded_options) << "Parsed" << embedded_options << "embedded options";
+  }
+  L4 << "M" << aig->maxvar << " I" << aig->num_inputs << " L"
+     << aig->num_latches << " O" << aig->num_outputs << " A" << aig->num_ands
+     << " B" << aig->num_bad << " C" << aig->num_constraints << " J"
+     << aig->num_justice << " F" << aig->num_fairness;
+}
+
 void write_witness(aiger *circuit, const char *path) {
   int err;
   if (path)

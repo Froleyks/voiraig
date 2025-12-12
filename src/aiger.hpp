@@ -82,38 +82,7 @@ bool inputs_latches_reencoded(aiger *aig);
 
 struct InAIG {
   aiger *aig;
-  InAIG(const char *path, options *options = 0) : aig(aiger_init()) {
-    const char *err = aiger_open_and_read_from_file(aig, path);
-    L4 << "read" << path;
-    auto invalid = [path, err](int code, const char *reason) {
-      std::cerr << "voiraig: " << reason << " " << path << ": " << err << "\n";
-      exit(code);
-    };
-    if (err) invalid(1, "parse error reading");
-    if (!inputs_latches_reencoded(aig))
-      invalid(2,
-              "inputs and latches have to be reencoded even in ASCII format:");
-    if (aig->num_justice) invalid(3, "justice constraints are not supported:");
-    if (aig->num_fairness > 1)
-      invalid(4, "multiple fairness constraints are not supported:");
-    if (aig->num_fairness + aig->num_bad + aig->num_outputs > 1)
-      invalid(5, "combination of safety and liveness not supported:");
-
-    if (aig->num_bad + aig->num_outputs > 1)
-      std::cout << "voiraig: WARNING Multiple properties. Using "
-                << (aig->num_bad ? "bad" : "output") << "0: " << path << "\n";
-    unsigned embedded_options{};
-    if (options) {
-      char **p, *str;
-      for (p = aig->comments; (str = *p); p++) {
-        if (*str != '-' || *(str + 1) != '-') continue;
-        embedded_options++;
-        parse_option_with_value(options, str);
-      }
-      LI2(embedded_options)
-          << "Parsed" << embedded_options << "embedded options";
-    }
-  }
+  InAIG(const char *path, options *options = 0);
   ~InAIG() { aiger_reset(aig); }
   aiger *operator*() const { return aig; }
 };
