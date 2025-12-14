@@ -112,7 +112,9 @@ bool build_cex(aiger *model, std::vector<std::vector<unsigned>> &safety_cex,
     if (sign(s[IDX(Q)], Q) == X1) {
       L4 << "Liveness violation";
       std::vector<ternary> s_latch;
-      s_latch.reserve(model->num_latches);
+      s_latch.reserve(model->num_inputs + model->num_latches);
+      for (auto l : inputs(model) | lits)
+        s_latch.push_back(s[IDX(l)]);
       for (auto l : latches(model) | lits | std::views::take(og_num_latches))
         s_latch.push_back(s[IDX(l)]);
       L5 << "inserting" << s_latch;
@@ -122,7 +124,6 @@ bool build_cex(aiger *model, std::vector<std::vector<unsigned>> &safety_cex,
 
         return true;
       }
-
     }
 
     std::vector<std::pair<unsigned, ternary>> updates;
@@ -170,14 +171,10 @@ bool k_liveness(aiger *model, aiger *&witness,
       if (build_cex(safety, safety_cex, Q, model->num_latches)) {
         L3 << "liveness cex build for k =" << k;
         cex.swap(safety_cex);
-        for (auto x : cex){
-          L5 << x;
-        }
         aiger_reset(safety);
         return true;
       }
       aiger_reset(safety);
-      if (k > 1) exit(0); // FIXME
     } else {
       L3 << "unsat for k =" << k;
       build_witness(witness, safety, model, k, lives);
