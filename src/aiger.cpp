@@ -236,7 +236,10 @@ void write_witness(aiger *model, const std::vector<std::vector<unsigned>> &cex,
     if (!f.is_open()) die("cannot write %s", path);
   }
   std::ostream &o = (path ? f : std::cout);
-  o << "1\nb0\n";
+  if (model->num_justice)
+    o << "1\nj0\n";
+  else
+    o << "1\nb0\n";
   expand(o, cex[0], model->latches, model->num_inputs + model->num_latches);
   o << "\n";
   for (unsigned i = 1; i < cex.size(); ++i) {

@@ -3,18 +3,20 @@
 #include "aiger.h"
 #include "aiger.hpp"
 #include "ic3.hpp"
+#include "ternary.hpp"
 #include "utils.hpp"
 
 #include <algorithm>
 #include <charconv>
 #include <cstdlib>
 #include <cstring>
+#include <unordered_set>
 #include <vector>
 
 // Build a safety instance where the fairness literal may be violated at most
 // 'k' times. The (k+1)th violation triggers bad.
-std::pair<aiger *, std::vector<unsigned>> build_safety_instance(aiger *model,
-                                                                unsigned k) {
+std::tuple<aiger *, std::vector<unsigned>, unsigned>
+build_safety_instance(aiger *model, unsigned k) {
   L3 << "building safety instance for k =" << k;
   std::vector<unsigned> map(size(model), INVALID_LIT);
   auto m = [&map](unsigned from, unsigned to) {
@@ -71,10 +73,66 @@ std::pair<aiger *, std::vector<unsigned>> build_safety_instance(aiger *model,
   unsigned P = k ? disj(safety, lives.back(), Q) : Q;
   L4 << "Reduced to safety property" << P;
   aiger_add_bad(safety, aiger_not(P), "k-buffered");
-  return {safety, lives};
+  return {safety, lives, map[model->justice[0].lits[0]]};
 }
 
-bool build_cex(aiger *model, std::vector<std::vector<unsigned>> &safety_cex) {
+bool build_cex(aiger *model, std::vector<std::vector<unsigned>> &safety_cex,
+               unsigned Q, unsigned og_num_latches) {
+  L4 << "building liveness cex from safety cex size" << safety_cex.size();
+  for (auto x : safety_cex)
+    L5 << x;
+  assert(model);
+  assert(safety_cex.size() >= 2);
+
+  struct TernaryVecHash {
+    size_t operator()(const std::vector<ternary> &v) const {
+      size_t h = v.size();
+      for (auto t : v)
+        h = h * 1315423911u + static_cast<unsigned>(t);
+      return h;
+    }
+  };
+  std::unordered_set<std::vector<ternary>, TernaryVecHash> visited;
+
+  // TODO don't use ternary here
+  // const unsigned violation = model->justice[0].lits[0];
+  std::vector<ternary> s(model->maxvar + 1, X);
+  s[0] = X0; // constant false
+  for (auto l : safety_cex[0]) {
+    L5 << "setting input" << l << "at index" << IDX(l) << "to" << (int)STX(l);
+    s[IDX(l)] = STX(l);
+  }
+  safety_cex[0].resize(og_num_latches); // remove extra lives
+  for (size_t i = 1; i < safety_cex.size(); ++i) {
+    for (auto i : safety_cex[i])
+      s[IDX(i)] = STX(i);
+    propagate(model->ands, model->num_ands, s);
+    L5 << s;
+
+    if (sign(s[IDX(Q)], Q) == X1) {
+      L4 << "Liveness violation";
+      std::vector<ternary> s_latch;
+      s_latch.reserve(model->num_latches);
+      for (auto l : latches(model) | lits | std::views::take(og_num_latches))
+        s_latch.push_back(s[IDX(l)]);
+      L5 << "inserting" << s_latch;
+      if (!visited.insert(s_latch).second) {
+        L4 << "repeated violation";
+        safety_cex.resize(i + 1);
+
+        return true;
+      }
+
+    }
+
+    std::vector<std::pair<unsigned, ternary>> updates;
+    updates.reserve(model->num_latches);
+    for (auto [l, n] : latches(model) | nexts)
+      updates.emplace_back(IDX(l), sign(s[IDX(n)], n));
+    for (auto [i, v] : updates)
+      s[i] = v;
+  }
+
   return false;
 }
 
@@ -89,8 +147,8 @@ void build_witness(aiger *&witness, aiger *kWit, aiger *model, unsigned k,
         disj(witness, decreased, conj(witness, l->lit, aiger_not(l->next)));
   }
   L1 << "liveness decrease literal" << decreased;
-  unsigned justice_lits[] = {decreased};
-  aiger_add_justice(witness, 1, justice_lits, nullptr);
+  unsigned violations[] = {decreased};
+  aiger_add_justice(witness, 1, violations, nullptr);
 }
 
 // namespace
@@ -103,19 +161,23 @@ bool k_liveness(aiger *model, aiger *&witness,
   assert(model->justice[0].size == 1);
   for (unsigned k = 0;; ++k) {
     L2 << "k-liveness trial k =" << k;
-    auto [safety, lives] = build_safety_instance(model, k);
+    auto [safety, lives, Q] = build_safety_instance(model, k);
 
     std::vector<std::vector<unsigned>> safety_cex;
     const bool bug = ic3(safety, safety_cex);
     if (bug) {
       L3 << "sat for k =" << k;
-      aiger_reset(safety);
-
-      if (build_cex(model, safety_cex)) {
-        L3 << "liveness cex built for k =" << k;
+      if (build_cex(safety, safety_cex, Q, model->num_latches)) {
+        L3 << "liveness cex build for k =" << k;
         cex.swap(safety_cex);
+        for (auto x : cex){
+          L5 << x;
+        }
+        aiger_reset(safety);
         return true;
       }
+      aiger_reset(safety);
+      if (k > 1) exit(0); // FIXME
     } else {
       L3 << "unsat for k =" << k;
       build_witness(witness, safety, model, k, lives);
