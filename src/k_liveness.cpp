@@ -13,7 +13,8 @@
 
 // Build a safety instance where the fairness literal may be violated at most
 // 'k' times. The (k+1)th violation triggers bad.
-aiger *build_safety_instance(aiger *model, unsigned k) {
+std::pair<aiger *, std::vector<unsigned>> build_safety_instance(aiger *model,
+                                                                unsigned k) {
   L3 << "building safety instance for k =" << k;
   if (k > 4) exit(0); // TEMP
   std::vector<unsigned> map(size(model), INVALID_LIT);
@@ -64,6 +65,7 @@ aiger *build_safety_instance(aiger *model, unsigned k) {
   for (int i = 0; i < k; ++i) {
     aiger_symbol *l = aiger_is_latch(safety, lives[i]);
     assert(l);
+    assert(l->lit == lives[i]);
     l->reset = 1;
     l->next = conj(safety, lives[i], disj(safety, Q, i ? lives[i - 1] : 0));
   }
@@ -71,14 +73,26 @@ aiger *build_safety_instance(aiger *model, unsigned k) {
   unsigned P = k ? disj(safety, lives.back(), Q) : Q;
   L4 << "Reduced to safety property" << P;
   aiger_add_bad(safety, aiger_not(P), "k-buffered");
-  return safety;
+  return {safety, lives};
 }
 
 bool build_cex(aiger *model, std::vector<std::vector<unsigned>> &safety_cex) {
   return false;
 }
 
-void build_witness(aiger *&witness, aiger *model, unsigned k) {}
+void build_witness(aiger *&witness, aiger *kWit, aiger *model, unsigned k,
+                   const std::vector<unsigned> &lives) {
+  witness = kWit;
+  unsigned decreased = 0;
+  for (auto i : lives) {
+    aiger_symbol *l = aiger_is_latch(witness, i);
+    assert(l);
+    decreased = disj(witness, decreased, conj(witness, l->lit, aiger_not(l->next)));
+  }
+    L1 << "liveness decrease literal" << decreased;
+  unsigned justice_lits[] = {decreased};
+  aiger_add_justice(witness, 1, justice_lits, nullptr);
+}
 
 // namespace
 
@@ -90,13 +104,14 @@ bool k_liveness(aiger *model, aiger *&witness,
   assert(model->justice[0].size == 1);
   for (unsigned k = 0;; ++k) {
     L2 << "k-liveness trial k =" << k;
-    aiger *safety = build_safety_instance(model, k);
+    auto [safety, lives] = build_safety_instance(model, k);
 
     std::vector<std::vector<unsigned>> safety_cex;
     const bool bug = ic3(safety, safety_cex);
-    aiger_reset(safety);
     if (bug) {
       L3 << "sat for k =" << k;
+      aiger_reset(safety);
+
       if (build_cex(model, safety_cex)) {
         L3 << "liveness cex built for k =" << k;
         cex.swap(safety_cex);
@@ -104,7 +119,8 @@ bool k_liveness(aiger *model, aiger *&witness,
       }
     } else {
       L3 << "unsat for k =" << k;
-      build_witness(witness, model, k);
+      build_witness(witness, safety, model, k, lives);
+      return false;
     }
   }
   // Unreachable, but placate compilers.
