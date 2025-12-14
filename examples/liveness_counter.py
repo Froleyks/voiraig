@@ -1,18 +1,20 @@
 #!/usr/bin/env python3
 
 from sys import argv, exit
-if len(argv) != 3:
-    print("Usage: ./liveness_counter.py <number of latches> <live bit>")
+if len(argv) < 3:
+    print("Usage: ./liveness_counter.py <number of latches> <live bit> [--fail]")
+    print("  --fail flips the live bit resulting in a sat instance")
     exit(1)
 n = int(argv[1])
 live_bit = int(argv[2])
+safe = int(len(argv) <= 3) # no third arg specified
 assert 0 <= live_bit < n
 
 v = 2
 L = []
 for _ in range(n):
     L.append(v); v += 2
-J = L[live_bit]^1
+J = L[live_bit]^safe
 
 gates = []
 def gate(x, y):
