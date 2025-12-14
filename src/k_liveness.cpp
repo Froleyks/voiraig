@@ -85,9 +85,10 @@ void build_witness(aiger *&witness, aiger *kWit, aiger *model, unsigned k,
   for (auto i : lives) {
     aiger_symbol *l = aiger_is_latch(witness, i);
     assert(l);
-    decreased = disj(witness, decreased, conj(witness, l->lit, aiger_not(l->next)));
+    decreased =
+        disj(witness, decreased, conj(witness, l->lit, aiger_not(l->next)));
   }
-    L1 << "liveness decrease literal" << decreased;
+  L1 << "liveness decrease literal" << decreased;
   unsigned justice_lits[] = {decreased};
   aiger_add_justice(witness, 1, justice_lits, nullptr);
 }
