@@ -16,7 +16,6 @@
 std::pair<aiger *, std::vector<unsigned>> build_safety_instance(aiger *model,
                                                                 unsigned k) {
   L3 << "building safety instance for k =" << k;
-  if (k > 4) exit(0); // TEMP
   std::vector<unsigned> map(size(model), INVALID_LIT);
   auto m = [&map](unsigned from, unsigned to) {
     assert(map[from] == INVALID_LIT);
@@ -39,7 +38,6 @@ std::pair<aiger *, std::vector<unsigned>> build_safety_instance(aiger *model,
   L4 << "added extra lives" << lives;
 
   for (auto [a, x, y] : ands(model)) {
-    L5 << "and" << a << "=" << x << "&" << y;
     assert(map[a] == INVALID_LIT);
     assert(map[x] != INVALID_LIT);
     assert(map[y] != INVALID_LIT);
