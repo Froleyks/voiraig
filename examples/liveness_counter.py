@@ -2,19 +2,22 @@
 
 from sys import argv, exit
 if len(argv) < 3:
-    print("Usage: ./liveness_counter.py <number of latches> <live bit> [--fail]")
-    print("  --fail flips the live bit resulting in a sat instance")
+    print("Usage: ./liveness_counter.py <number of latches> <live bit> [<input>]")
+    print("   A single input can be counted instead of always increasing.")
+    print("   This makes the model not live.")
     exit(1)
 n = int(argv[1])
 live_bit = int(argv[2])
-safe = int(len(argv) <= 3) # no third arg specified
+add_input = int(len(argv) > 3) and argv[23] != '0'
 assert 0 <= live_bit < n
 
 v = 2
+if add_input:
+    v += 2
 L = []
 for _ in range(n):
     L.append(v); v += 2
-J = L[live_bit]^safe
+J = L[live_bit]^1
 
 gates = []
 def gate(x, y):
@@ -28,6 +31,8 @@ def gate(x, y):
 # Ripple-carry add input
 Lnext = []
 carry = 1
+if add_input:
+    carry = 2
 inc_bits = []
 for bit in L:
     # XOR via (bit & ~carry) | (~bit & carry)
@@ -45,7 +50,9 @@ for inc in inc_bits:
 assert len(L) == len(Lnext) == n
 
 M = (v - 2) // 2
-print(f"aag {M} 0 {len(L)} 0 {len(gates)} 0 0 1 0")
+print(f"aag {M} {int(add_input)} {len(L)} 0 {len(gates)} 0 0 1 0")
+if add_input:
+    print(2)
 for l, n in zip(L, Lnext):
     print(f"{l} {n}")
 print("1") # size of the single justice constraint
