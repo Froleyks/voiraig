@@ -49,34 +49,40 @@ std::vector<unsigned> stabilizers(aiger *model) {
   }
 
   std::vector<unsigned> candidates;
-  candidates.reserve(model->maxvar);
-  for (size_t i = 1; i <= model->maxvar; ++i)
-    candidates.push_back(2 * i);
+  candidates.reserve(model->num_latches);
+  for (int i = model->num_latches - 1; i >= 0; --i)
+    candidates.push_back(model->latches[i].lit);
+  assert(candidates.size() == model->num_latches);
+  // candidates.reserve(model->maxvar);
+  // for (size_t i = 1; i <= model->maxvar; ++i)
+  // candidates.push_back(2 * i);
   // for (size_t i = model->maxvar; i > 1; --i)
   // candidates.push_back(2 * i);
-  assert(candidates.size() == model->maxvar);
+  // assert(candidates.size() == model->maxvar);
   for (int round = 0; candidates.size(); ++round) {
     L4 << "beginning round" << round << "with" << candidates.size()
        << "candidates";
     size_t w{};
     for (int i = 0; i < candidates.size(); ++i) {
-      const unsigned c = candidates[i];
-      L5 << "checking candidate" << c;
-      bool stabilized{false};
-      for (unsigned sign = 0; sign < 2 && !stabilized; ++sign) {
-        s.assume(u[0][c ^ sign]);
-        s.assume(-u[1][c ^ sign]);
-        stabilized = (s.solve() == 20);
+      bool stabilized{};
+      for (unsigned sign = 0; sign < 2; ++sign) {
+        unsigned c = candidates[i] ^ sign;
+        L5 << "checking candidate" << c;
+        s.assume(u[0][c]);
+        s.assume(-u[1][c]);
+        if (s.solve() != 20) continue;
+        L5 << "found stabilizer" << c;
+        stabilized = true;
+        stable.push_back(c);
+        // Add both directions!
+        s.clause(-u[0][c], u[1][c]);
+        s.clause(-u[1][c], u[0][c]);
+        break;
       }
       if (!stabilized) {
-        candidates[w++] = c;
+        candidates[w++] = candidates[i];
         continue;
       }
-      L5 << "found stabilizer" << c;
-      stable.push_back(c);
-      // Add both directions!
-      s.clause(-u[0][c], u[1][c]);
-      s.clause(-u[1][c], u[0][c]);
     }
     candidates.resize(w);
   }

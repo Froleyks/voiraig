@@ -17,7 +17,7 @@
 
 // Build a safety instance where the fairness literal may be violated at most
 // 'k' times. The (k+1)th violation triggers bad.
-std::tuple<aiger *, std::vector<unsigned>, unsigned>
+std::tuple<aiger *, std::vector<unsigned>, unsigned, std::vector<unsigned>>
 build_safety_instance(aiger *model, unsigned k,
                       const std::vector<unsigned> &stable) {
   L3 << "building safety instance for k =" << k;
@@ -61,7 +61,8 @@ build_safety_instance(aiger *model, unsigned k,
     assert(map[c.lit] != INVALID_LIT);
     aiger_add_constraint(safety, map[c.lit], c.name);
   }
-
+  std::vector<unsigned> stabilized;
+  stabilized.reserve(stable.size());
   unsigned Q{1};
   for (auto i : stable) {
     if (aiger_symbol *l = aiger_is_latch(model, i)) {
@@ -70,6 +71,7 @@ build_safety_instance(aiger *model, unsigned k,
       assert(map[l->next] != INVALID_LIT);
       unsigned stabilizer = eq(safety, map[l->lit], map[l->next]);
       Q = conj(safety, Q, stabilizer);
+      stabilized.push_back(map[l->lit]);
     }
   }
   Q = impl(safety, Q, aiger_not(map[model->justice[0].lits[0]]));
@@ -86,7 +88,7 @@ build_safety_instance(aiger *model, unsigned k,
   L4 << "Reduced to safety property" << P;
   aiger_add_bad(safety, aiger_not(P), "k-buffered");
   aiger_open_and_write_to_file(safety, "k_liveness.aag");
-  return {safety, lives, map[model->justice[0].lits[0]]};
+  return {safety, lives, map[model->justice[0].lits[0]], stabilized};
 }
 
 bool build_cex(aiger *model, std::vector<std::vector<unsigned>> &safety_cex,
@@ -153,14 +155,29 @@ bool build_cex(aiger *model, std::vector<std::vector<unsigned>> &safety_cex,
 void build_witness(aiger *&witness, aiger *kWit, aiger *model, unsigned k,
                    const std::vector<unsigned> &lives,
                    const std::vector<unsigned> &stable) {
+  L5 << "building witness for k =" << k;
+  L5 << stable;
   witness = kWit;
-  unsigned decreased = 0;
-  for (auto i : lives) {
+  unsigned equally_stable{1}, less_stable{0};
+  for (unsigned i : stable) {
+    L5 << "comparator for" << i;
     aiger_symbol *l = aiger_is_latch(witness, i);
     assert(l);
-    decreased =
-        disj(witness, decreased, conj(witness, l->lit, aiger_not(l->next)));
+    less_stable = disj(witness, less_stable,
+                       conj(witness, equally_stable,
+                            conj(witness, aiger_not(l->lit), l->next)));
+    equally_stable =
+        conj(witness, equally_stable, eq(witness, l->lit, l->next));
   }
+  unsigned less_live{};
+  for (unsigned i : lives) {
+    aiger_symbol *l = aiger_is_latch(witness, i);
+    assert(l);
+    less_live =
+        disj(witness, less_live, conj(witness, l->lit, aiger_not(l->next)));
+  }
+  unsigned decreased =
+      disj(witness, less_stable, conj(witness, equally_stable, less_live));
   L1 << "liveness decrease literal" << decreased;
   unsigned violations[] = {decreased};
   aiger_add_justice(witness, 1, violations, nullptr);
@@ -173,11 +190,11 @@ bool k_liveness(aiger *model, aiger *&witness,
   assert(model->num_justice == 1);
   assert(model->justice[0].size == 1);
 
-  auto stable = stabilizers(model);
+  const std::vector<unsigned> stable = stabilizers(model);
 
   for (unsigned k = 0;; ++k) {
     L2 << "k-liveness trial k =" << k;
-    auto [safety, lives, Q] = build_safety_instance(model, k, stable);
+    auto [safety, lives, Q, stabilized] = build_safety_instance(model, k, stable);
 
     std::vector<std::vector<unsigned>> safety_cex;
     const bool bug = ic3(safety, safety_cex);
@@ -192,7 +209,7 @@ bool k_liveness(aiger *model, aiger *&witness,
       aiger_reset(safety);
     } else {
       L3 << "unsat for k =" << k;
-      build_witness(witness, safety, model, k, lives,stable);
+      build_witness(witness, safety, model, k, lives, stabilized);
       return false;
     }
   }
