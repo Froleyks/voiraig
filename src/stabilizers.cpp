@@ -59,9 +59,11 @@ std::vector<unsigned> stabilizers(aiger *model) {
   // for (size_t i = model->maxvar; i > 1; --i)
   // candidates.push_back(2 * i);
   // assert(candidates.size() == model->maxvar);
-  for (int round = 0; candidates.size(); ++round) {
+  bool progress{true};
+  for (int round = 0; candidates.size() && progress; ++round) {
     L4 << "beginning round" << round << "with" << candidates.size()
        << "candidates";
+    progress = false;
     size_t w{};
     for (int i = 0; i < candidates.size(); ++i) {
       bool stabilized{};
@@ -72,6 +74,7 @@ std::vector<unsigned> stabilizers(aiger *model) {
         s.assume(-u[1][c]);
         if (s.solve() != 20) continue;
         L5 << "found stabilizer" << c;
+        progress = true;
         stabilized = true;
         stable.push_back(c);
         // Add both directions!
