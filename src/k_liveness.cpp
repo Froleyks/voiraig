@@ -163,12 +163,12 @@ void build_witness(aiger *&witness, aiger *kWit, aiger *model, unsigned k,
   L5 << stable;
   witness = kWit;
   unsigned equally_stable{1}, less_stable{0};
-  for (unsigned i : stable) {
-    L5 << "comparator for" << i;
-    aiger_symbol *l = aiger_is_latch(witness, i);
+  for (unsigned c : stable) {
+    aiger_symbol *l = aiger_is_latch(witness, c);
     assert(l);
-    unsigned c{l->lit ^ (i & 1u)};
-    unsigned n{l->next ^ (i & 1u)};
+    l->next = conj(witness, l->next, l->next); // alias
+    unsigned n{l->next ^ (c & 1u)};
+    L5 << "comparator" <<  c << "<=" << n;
     less_stable =
         disj(witness, less_stable,
              conj(witness, equally_stable, conj(witness, aiger_not(c), n)));
