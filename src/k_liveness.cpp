@@ -67,11 +67,15 @@ build_safety_instance(aiger *model, unsigned k,
   for (auto i : stable) {
     if (aiger_symbol *l = aiger_is_latch(model, i)) {
       L5 << "adding stabilizer for latch" << i;
-      assert(map[l->lit] != INVALID_LIT);
-      assert(map[l->next] != INVALID_LIT);
-      unsigned stabilizer = eq(safety, map[l->lit], map[l->next]);
+      L5 << map;
+      assert(l);
+      unsigned c{l->lit ^ (i & 1u)};
+      unsigned n{l->next ^ (i & 1u)};
+      assert(map[c] != INVALID_LIT);
+      assert(map[n] != INVALID_LIT);
+      unsigned stabilizer = eq(safety, map[c], map[n]);
       Q = conj(safety, Q, stabilizer);
-      stabilized.push_back(map[l->lit]);
+      stabilized.push_back(map[c]);
     }
   }
   Q = impl(safety, Q, aiger_not(map[model->justice[0].lits[0]]));
@@ -163,18 +167,20 @@ void build_witness(aiger *&witness, aiger *kWit, aiger *model, unsigned k,
     L5 << "comparator for" << i;
     aiger_symbol *l = aiger_is_latch(witness, i);
     assert(l);
-    less_stable = disj(witness, less_stable,
-                       conj(witness, equally_stable,
-                            conj(witness, aiger_not(l->lit), l->next)));
-    equally_stable =
-        conj(witness, equally_stable, eq(witness, l->lit, l->next));
+    unsigned c{l->lit ^ (i & 1u)};
+    unsigned n{l->next ^ (i & 1u)};
+    less_stable =
+        disj(witness, less_stable,
+             conj(witness, equally_stable, conj(witness, aiger_not(c), n)));
+    equally_stable = conj(witness, equally_stable, eq(witness, c, n));
   }
   unsigned less_live{};
   for (unsigned i : lives) {
     aiger_symbol *l = aiger_is_latch(witness, i);
     assert(l);
-    less_live =
-        disj(witness, less_live, conj(witness, l->lit, aiger_not(l->next)));
+    unsigned c{l->lit ^ (i & 1u)};
+    unsigned n{l->next ^ (i & 1u)};
+    less_live = disj(witness, less_live, conj(witness, c, aiger_not(n)));
   }
   unsigned decreased =
       disj(witness, less_stable, conj(witness, equally_stable, less_live));
@@ -194,7 +200,8 @@ bool k_liveness(aiger *model, aiger *&witness,
 
   for (unsigned k = 0;; ++k) {
     L2 << "k-liveness trial k =" << k;
-    auto [safety, lives, Q, stabilized] = build_safety_instance(model, k, stable);
+    auto [safety, lives, Q, stabilized] =
+        build_safety_instance(model, k, stable);
 
     std::vector<std::vector<unsigned>> safety_cex;
     const bool bug = ic3(safety, safety_cex);

@@ -82,10 +82,7 @@ std::vector<unsigned> stabilizers(aiger *model) {
         s.clause(-u[1][c], u[0][c]);
         break;
       }
-      if (!stabilized) {
-        candidates[w++] = candidates[i];
-        continue;
-      }
+      if (!stabilized) candidates[w++] = candidates[i];
     }
     candidates.resize(w);
   }
