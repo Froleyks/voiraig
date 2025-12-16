@@ -14,7 +14,7 @@
   OPTION(bool,     certificate, 1, 0, 1, "produce witness circuit") \
   OPTION(bool,     kind,        0, 0, 0, "use k-Induction") \
 LOGOPT(bool,       location,    1, 0, 1, "use location for logging") \
-  OPTION(bool,     lts,         0, 0, 0, "liveness to safety") \
+  OPTION(bool,     lts,         0, 0, 1, "liveness to safety") \
   OPTION(unsigned, paths,       2, 0, 2, "type of simple path constrains") \
   OPTION(bool,     trace,       1, 0, 1, "produce cex trace") \
   OPTION(bool,     unique,      0, 0, 1, "always use unique kind witness construction") \
