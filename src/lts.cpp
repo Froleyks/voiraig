@@ -98,6 +98,15 @@ aiger *witness_construction(aiger *model, aiger *safety,
     m(l, input(witness));
   for (auto l : latches(safety) | lits)
     m(l, latch(witness));
+
+  // Add extra counter with L bits, starting once stored, it should saturate
+  // when reaching all one
+  const unsigned L = model->num_latches;
+  std::vector<unsigned> counter_bits;
+  counter_bits.reserve(L);
+  for (unsigned i = 0; i < L; ++i)
+    counter_bits.push_back(latch(witness));
+
   for (auto [a, x, y] : ands(safety)) {
     assert(map[a] == INVALID_LIT);
     assert(map[x] != INVALID_LIT);
@@ -123,14 +132,6 @@ aiger *witness_construction(aiger *model, aiger *safety,
   assert(B != INVALID_LIT);
   aiger_add_output(witness, B, nullptr);
 
-
-  // Add extra counter with L bits, starting once stored, it should saturate
-  // when reaching all one
-  const unsigned L = model->num_latches;
-  std::vector<unsigned> counter_bits;
-  counter_bits.reserve(L);
-  for (unsigned i = 0; i < L; ++i)
-    counter_bits.push_back(latch(witness));
 
   // Check if all bits are one (saturated)
   std::vector<unsigned> counter_bits_copy = counter_bits;
