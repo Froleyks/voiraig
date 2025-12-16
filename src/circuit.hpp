@@ -7,14 +7,36 @@
 #include <string>
 #include <vector>
 
-// Circuit representation using a single vector
-// Size: (M+1) * 2, where M is maxvar
-// Layout:
+// Circuit - Boolean Circuit Representation
+// 
+// A compact representation of boolean circuits using a single vector as an
+// alternative to the aiger library. The circuit is stored in a vector of
+// size (M+1) * 2, where M is the maximum variable index.
+//
+// Data Structure Layout:
 // - Index 0: number of inputs (I)
 // - Index 1: number of latches (L)
-// - Indices 2 to 2*(I+1)-1: inputs (nothing to store, just alignment)
-// - Indices 2*(I+1) to 2*(I+L+1)-1: latches (reset at pos lit, next at neg lit)
-// - Remaining indices: AND gates (left at pos lit, right at neg lit)
+// - Indices 2 to 2*(I+1)-1: inputs (indices align with AIGER literal numbering)
+// - Indices 2*(I+1) to 2*(I+L+1)-1: latches
+//   * Even index (positive literal): stores reset value
+//   * Odd index (negative literal): stores next state
+// - Remaining indices: AND gates
+//   * Even index (positive literal): stores left operand
+//   * Odd index (negative literal): stores right operand
+//
+// In literal indexing:
+// - Index 0 and 1 correspond to constants FALSE and TRUE
+// - Inputs are at literals 2, 4, 6, ...
+// - Latches follow inputs
+// - AND gates follow latches
+//
+// Each gate/latch definition is found at its positive literal index,
+// with additional data at the negative literal index.
+//
+// Usage:
+//   Circuit circuit;
+//   circuit.read_from_file("input.aag");  // Read AAG format
+//   std::cout << circuit;                 // Write AAG format
 
 class Circuit {
 public:
