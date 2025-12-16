@@ -133,7 +133,8 @@ aiger *witness_construction(aiger *model, aiger *safety,
     counter_bits.push_back(latch(witness));
 
   // Check if all bits are one (saturated)
-  unsigned saturated = conj(witness, counter_bits);
+  std::vector<unsigned> counter_bits_copy = counter_bits;
+  unsigned saturated = conj(witness, counter_bits_copy);
 
   // Increment counter when stored is true and not saturated
   unsigned increment = conj(witness, map[stored], aiger_not(saturated));
