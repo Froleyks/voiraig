@@ -30,10 +30,10 @@ build_safety_instance(aiger *model, unsigned k,
   };
   m(0, 0);
   auto *safety = aiger_init();
-  for (auto &i : inputs(model))
-    m(i.lit, input(safety));
-  for (auto &l : latches(model))
-    m(l.lit, latch(safety));
+  for (auto l : inputs(model) | lits)
+    m(l, input(safety));
+  for (auto l : latches(model) | lits)
+    m(l, latch(safety));
 
   // add new extra lives
   std::vector<unsigned> lives;
@@ -48,6 +48,7 @@ build_safety_instance(aiger *model, unsigned k,
     assert(map[y] != INVALID_LIT);
     m(a, conj(safety, map[x], map[y]));
   }
+
   // add back original latch transition and reset
   for (auto &l : latches(model)) {
     aiger_symbol *sl = aiger_is_latch(safety, map[l.lit]);
@@ -61,6 +62,7 @@ build_safety_instance(aiger *model, unsigned k,
     assert(map[c.lit] != INVALID_LIT);
     aiger_add_constraint(safety, map[c.lit], c.name);
   }
+
   std::vector<unsigned> stabilized;
   stabilized.reserve(stable.size());
   unsigned Q{1};
@@ -168,7 +170,7 @@ void build_witness(aiger *&witness, aiger *kWit, aiger *model, unsigned k,
     assert(l);
     l->next = conj(witness, l->next, l->next); // alias
     unsigned n{l->next ^ (c & 1u)};
-    L5 << "comparator" <<  c << "<=" << n;
+    L5 << "comparator" << c << "<=" << n;
     less_stable =
         disj(witness, less_stable,
              conj(witness, equally_stable, conj(witness, aiger_not(c), n)));

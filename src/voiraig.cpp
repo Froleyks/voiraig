@@ -2,8 +2,9 @@
 #include "banner.hpp"
 #include "cadical.hpp"
 #include "ic3.hpp"
-#include "kind.hpp"
 #include "k_liveness.hpp"
+#include "kind.hpp"
+#include "lts.hpp"
 #include "options.hpp"
 
 #include "utils.hpp"
@@ -18,10 +19,12 @@ int main(int argc, char *argv[]) {
   bool bug;
   aiger *witness{};
 
-
-  if ((*model)->num_justice)
-    bug = k_liveness(*model, witness, cex);
-  else if (options.kind)
+  if ((*model)->num_justice) {
+    if (options.lts)
+      bug = lts(*model, witness, cex);
+    else
+      bug = k_liveness(*model, witness, cex);
+  } else if (options.kind)
     bug = kind(*model, witness, cex, options.paths, options.unique);
   else
     bug = ic3(*model, cex);
