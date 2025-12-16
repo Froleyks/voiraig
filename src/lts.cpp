@@ -18,15 +18,15 @@ safety_reduction(aiger *model) {
   auto *safety = aiger_init();
   for (auto l : inputs(model) | lits)
     m(l, input(safety));
-  const unsigned store{input(safety)};
+  const unsigned store{input(safety, "store")};
   std::vector<unsigned> original, copy;
   original.reserve(model->num_latches);
   copy.reserve(model->num_latches);
   for (auto l : latches(model) | lits)
     original.push_back(m(l, latch(safety)));
   for (auto l : latches(model) | lits)
-    copy.push_back(latch(safety));
-  const unsigned stored{latch(safety)}, seen{latch(safety)};
+    copy.push_back(latch(safety, "copy"));
+  const unsigned stored{latch(safety, "stored")}, seen{latch(safety, "seen")};
 
   for (auto [a, x, y] : ands(model)) {
     assert(map[a] == INVALID_LIT);
@@ -69,7 +69,7 @@ safety_reduction(aiger *model) {
   unsigned B{seen};
   for (size_t i = 0; i < original.size(); ++i)
     B = conj(safety, B, eq(safety, original[i], copy[i]));
-  aiger_add_output(safety, B, "lts_bad");
+  aiger_add_output(safety, B, "bad");
   return {safety, store, stored, J, original, copy};
 }
 
@@ -82,7 +82,7 @@ void cex_construction(aiger *model, std::vector<std::vector<unsigned>> &cex) {
 
 aiger *witness_construction(aiger *model, aiger *safety,
                             std::vector<std::vector<unsigned>> &cex,
-                            unsigned store, unsigned stored, unsigned J,
+                            unsigned store, unsigned stored, unsigned og_J,
                             unsigned og_gates,
                             const std::vector<unsigned> &original,
                             const std::vector<unsigned> &copy) {
@@ -98,39 +98,51 @@ aiger *witness_construction(aiger *model, aiger *safety,
     return to;
   };
   m(0, 0);
-  for (auto l : inputs(safety) | lits)
-    m(l, input(witness));
-  for (auto l : latches(safety) | lits)
-    m(l, latch(witness));
-  for (int i = 0; i < og_gates; ++i) {
-    aiger_and *a = safety->ands + i;
-    assert(map[a->lhs] == INVALID_LIT);
-    assert(map[a->rhs0] != INVALID_LIT);
-    assert(map[a->rhs1] != INVALID_LIT);
-    m(a->lhs, conj(witness, map[a->rhs0], map[a->rhs1]));
+  for (auto l : inputs(safety))
+    m(l.lit, input(witness, l.name));
+  for (auto l : latches(safety))
+    m(l.lit, latch(witness, l.name));
+  for (auto [a, x, y] : ands(safety)) {
+    assert(map[a] == INVALID_LIT);
+    assert(map[x] != INVALID_LIT);
+    assert(map[y] != INVALID_LIT);
+    m(a, conj(witness, map[x], map[y]));
   }
-  assert(original.size() == copy.size());
-  for (int i = 0; i < original.size(); ++i) {
-    aiger_symbol *l = aiger_is_latch(witness, map[original[i]]);
-    assert(l);
-    aiger_symbol *ol = aiger_is_latch(safety, original[i]);
-    assert(ol);
-    assert(map[ol->next] != INVALID_LIT);
-    l->next = map[ol->next];
-    m(copy[i], l->next);
+  for (auto &l : latches(safety)) {
+    assert(map[l.reset] != INVALID_LIT);
+    assert(map[l.next] != INVALID_LIT);
+    aiger_symbol *sl = aiger_is_latch(witness, map[l.lit]);
+    assert(sl);
+    sl->reset = map[l.reset];
+    sl->next = map[l.next];
   }
-  for (int i = og_gates; i < safety->num_ands; ++i) {
-    aiger_and *a = safety->ands + i;
-    assert(map[a->lhs] == INVALID_LIT);
-    assert(map[a->rhs0] != INVALID_LIT);
-    assert(map[a->rhs1] != INVALID_LIT);
-    m(a->lhs, conj(witness, map[a->rhs0], map[a->rhs1]));
+  for (auto &c : constraints(safety)) {
+    assert(map[c.lit] != INVALID_LIT);
+    aiger_add_constraint(witness, map[c.lit], c.name);
   }
   unsigned B{map[safety->outputs[0].lit]};
-  // B after the intervention has the following semantics:
-  // B for some state s -> s is not in a loop
-  unsigned violations[] = {B};
-  aiger_add_justice(witness, 1, violations, nullptr);
+  aiger_add_output(witness, B, "Plts");
+
+  // fully copied safety witness, now override Lc with L1 and rebuild ands
+  assert(original.size() == copy.size());
+  for (int i = 0; i < original.size(); ++i) {
+    aiger_symbol *l_original = aiger_is_latch(safety, original[i]);
+    assert(l_original);
+    aiger_symbol *l_copy = aiger_is_latch(safety, copy[i]);
+    assert(l_copy);
+    unsigned l1 = l_original->next;
+    unsigned lc = l_copy->lit;
+    m(lc, map[l1], true);
+  }
+  for (auto [a, x, y] : ands(safety)) {
+    assert(map[a] == INVALID_LIT);
+    assert(map[x] != INVALID_LIT);
+    assert(map[y] != INVALID_LIT);
+    m(a, conj(witness, map[x], map[y]));
+  }
+  unsigned J{map[safety->outputs[0].lit]};
+  unsigned violations[] = {J};
+  aiger_add_justice(witness, 1, violations, "Plts_Lc/L1");
 
   return witness;
 }
@@ -139,8 +151,10 @@ bool lts(aiger *model, aiger *&witness,
          std::vector<std::vector<unsigned>> &cex) {
   L3 << "Reducing liveness to safety";
   auto [safety, store, stored, J, original, copy] = safety_reduction(model);
+  aiger_open_and_write_to_file(safety, "l2s.aag");
 
   bool bug = ic3(safety, cex);
+  aiger_open_and_write_to_file(safety, "l2s_wit.aag");
   if (bug)
     cex_construction(model, cex);
   else
