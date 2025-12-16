@@ -49,6 +49,11 @@ public:
       throw std::runtime_error("Only AAG (ASCII AIGER) format supported");
     }
 
+    // Validate parameters to prevent overflow and excessive allocation
+    if (M > 1000000000u) {  // Reasonable upper bound
+      throw std::runtime_error("Maximum variable index too large");
+    }
+
     // Initialize data vector: (M+1) * 2
     data.resize((M + 1) * 2, 0);
     
@@ -66,7 +71,9 @@ public:
       id lit;
       iss >> lit;
       // Inputs should be 2, 4, 6, ... (even literals starting from 2)
-      assert(lit == 2 * (i + 1));
+      if (lit != 2 * (i + 1)) {
+        throw std::runtime_error("Invalid input literal encoding");
+      }
     }
     
     // Read latches: each line has "latch next [reset]"
@@ -86,7 +93,14 @@ public:
       }
       
       // Latch literal should be 2*(I+i+1)
-      assert(latch == 2 * (I + i + 1));
+      if (latch != 2 * (I + i + 1)) {
+        throw std::runtime_error("Invalid latch literal encoding");
+      }
+      
+      // Validate indices are within bounds
+      if (latch >= data.size() || (latch ^ 1) >= data.size()) {
+        throw std::runtime_error("Latch literal out of bounds");
+      }
       
       // Store reset at positive literal index, next at negative literal index
       data[latch] = reset;
@@ -107,8 +121,15 @@ public:
       id lhs, rhs0, rhs1;
       file >> lhs >> rhs0 >> rhs1;
       
-      // lhs should be even and > 2*(I+L+1)
-      assert((lhs & 1) == 0);
+      // lhs should be even and valid
+      if ((lhs & 1) != 0) {
+        throw std::runtime_error("AND gate LHS must be even");
+      }
+      
+      // Validate indices are within bounds
+      if (lhs >= data.size() || (lhs ^ 1) >= data.size()) {
+        throw std::runtime_error("AND gate literal out of bounds");
+      }
       
       // Store left operand at positive literal index, right at negative literal index
       data[lhs] = rhs0;
@@ -120,6 +141,11 @@ public:
 
   // Write AAG representation to output stream
   friend std::ostream& operator<<(std::ostream& os, const Circuit& circuit) {
+    // Validate circuit has been initialized
+    if (circuit.data.size() < 2) {
+      return os;  // Empty circuit, nothing to write
+    }
+    
     id I = circuit.data[0];  // Number of inputs
     id L = circuit.data[1];  // Number of latches
     id A = circuit.Q;        // Number of AND gates
@@ -140,6 +166,10 @@ public:
     // Format: latch next [reset] (reset omitted if it equals 0 = default)
     for (id i = 0; i < L; i++) {
       id latch_lit = 2 * (I + i + 1);
+      // Validate array access is within bounds
+      if (latch_lit >= circuit.data.size() || (latch_lit ^ 1) >= circuit.data.size()) {
+        continue;  // Skip invalid latch
+      }
       id reset = circuit.data[latch_lit];
       id next = circuit.data[latch_lit ^ 1];
       os << latch_lit << " " << next;
@@ -160,6 +190,10 @@ public:
     // Output AND gates
     for (id i = 0; i < A; i++) {
       id lhs = 2 * (I + L + i + 1);
+      // Validate array access is within bounds
+      if (lhs >= circuit.data.size() || (lhs ^ 1) >= circuit.data.size()) {
+        continue;  // Skip invalid AND gate
+      }
       id rhs0 = circuit.data[lhs];
       id rhs1 = circuit.data[lhs ^ 1];
       os << lhs << " " << rhs0 << " " << rhs1 << "\n";

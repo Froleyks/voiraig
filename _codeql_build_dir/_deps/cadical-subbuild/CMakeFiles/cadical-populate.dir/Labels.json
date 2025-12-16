@@ -1,0 +1,46 @@
+{
+	"sources" : 
+	[
+		{
+			"file" : "/home/runner/work/voiraig/voiraig/_codeql_build_dir/_deps/cadical-subbuild/CMakeFiles/cadical-populate"
+		},
+		{
+			"file" : "/home/runner/work/voiraig/voiraig/_codeql_build_dir/_deps/cadical-subbuild/CMakeFiles/cadical-populate.rule"
+		},
+		{
+			"file" : "/home/runner/work/voiraig/voiraig/_codeql_build_dir/_deps/cadical-subbuild/CMakeFiles/cadical-populate-complete.rule"
+		},
+		{
+			"file" : "/home/runner/work/voiraig/voiraig/_codeql_build_dir/_deps/cadical-subbuild/cadical-populate-prefix/src/cadical-populate-stamp/cadical-populate-build.rule"
+		},
+		{
+			"file" : "/home/runner/work/voiraig/voiraig/_codeql_build_dir/_deps/cadical-subbuild/cadical-populate-prefix/src/cadical-populate-stamp/cadical-populate-configure.rule"
+		},
+		{
+			"file" : "/home/runner/work/voiraig/voiraig/_codeql_build_dir/_deps/cadical-subbuild/cadical-populate-prefix/src/cadical-populate-stamp/cadical-populate-download.rule"
+		},
+		{
+			"file" : "/home/runner/work/voiraig/voiraig/_codeql_build_dir/_deps/cadical-subbuild/cadical-populate-prefix/src/cadical-populate-stamp/cadical-populate-install.rule"
+		},
+		{
+			"file" : "/home/runner/work/voiraig/voiraig/_codeql_build_dir/_deps/cadical-subbuild/cadical-populate-prefix/src/cadical-populate-stamp/cadical-populate-mkdir.rule"
+		},
+		{
+			"file" : "/home/runner/work/voiraig/voiraig/_codeql_build_dir/_deps/cadical-subbuild/cadical-populate-prefix/src/cadical-populate-stamp/cadical-populate-patch.rule"
+		},
+		{
+			"file" : "/home/runner/work/voiraig/voiraig/_codeql_build_dir/_deps/cadical-subbuild/cadical-populate-prefix/src/cadical-populate-stamp/cadical-populate-test.rule"
+		},
+		{
+			"file" : "/home/runner/work/voiraig/voiraig/_codeql_build_dir/_deps/cadical-subbuild/cadical-populate-prefix/src/cadical-populate-stamp/cadical-populate-update.rule"
+		}
+	],
+	"target" : 
+	{
+		"labels" : 
+		[
+			"cadical-populate"
+		],
+		"name" : "cadical-populate"
+	}
+}
