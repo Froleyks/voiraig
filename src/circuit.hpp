@@ -60,9 +60,9 @@ public:
     
     // Read inputs (just validate they exist in correct order)
     for (id i = 0; i < I; i++) {
-      std::string line;
-      std::getline(file, line);
-      std::istringstream iss(line);
+      std::string input_line;
+      std::getline(file, input_line);
+      std::istringstream iss(input_line);
       id lit;
       iss >> lit;
       // Inputs should be 2, 4, 6, ... (even literals starting from 2)
@@ -73,9 +73,9 @@ public:
     // reset is optional; if not present, defaults to 0 (FALSE)
     for (id i = 0; i < L; i++) {
       id latch, next, reset;
-      std::string line;
-      std::getline(file, line);
-      std::istringstream iss(line);
+      std::string latch_line;
+      std::getline(file, latch_line);
+      std::istringstream iss(latch_line);
       
       iss >> latch >> next;
       
@@ -151,7 +151,9 @@ public:
     }
     
     // Output property/output literals
-    if (O > 0 && circuit.P != 0) {
+    // Only output if there are outputs defined (O > 0)
+    // Note: We only store and output the first output/property
+    if (O > 0) {
       os << circuit.P << "\n";
     }
     
