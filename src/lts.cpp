@@ -3,7 +3,7 @@
 #include "aiger.hpp"
 #include "ic3.hpp"
 
-std::tuple<aiger *, unsigned, unsigned, std::vector<unsigned>,
+std::tuple<aiger *, unsigned, unsigned, unsigned, std::vector<unsigned>,
            std::vector<unsigned>>
 safety_reduction(aiger *model) {
   std::vector<unsigned> map(size(model), INVALID_LIT);
@@ -26,7 +26,7 @@ safety_reduction(aiger *model) {
     original.push_back(m(l, latch(safety)));
   for (auto l : latches(model))
     copy.push_back(latch(safety, "copy"));
-
+  unsigned stored{latch(safety, "stored")};
   for (auto [a, x, y] : ands(model)) {
     assert(map[a] == INVALID_LIT);
     assert(map[x] != INVALID_LIT);
@@ -43,8 +43,12 @@ safety_reduction(aiger *model) {
     assert(map[m->next] != INVALID_LIT);
     o->reset = map[m->reset];
     o->next = map[m->next];
-    c->reset = 1; // TODO this is specialized for the example
     c->next = ite(safety, store, o->lit, c->lit);
+  }
+  {
+    aiger_symbol *s = aiger_is_latch(safety, stored);
+    assert(s);
+    s->next = disj(safety, stored, store);
   }
 
   for (auto &c : constraints(model)) {
@@ -54,11 +58,11 @@ safety_reduction(aiger *model) {
   const unsigned J{map[model->justice[0].lits[0]]};
   assert(J != INVALID_LIT);
 
-  unsigned B{J};
+  unsigned B = conj(safety, stored, J);
   for (size_t i = 0; i < original.size(); ++i)
     B = conj(safety, B, eq(safety, original[i], copy[i]));
   aiger_add_output(safety, B, "bad");
-  return {safety, store, J, original, copy};
+  return {safety, store, stored, J, original, copy};
 }
 
 void cex_construction(aiger *model, std::vector<std::vector<unsigned>> &cex) {
@@ -70,7 +74,8 @@ void cex_construction(aiger *model, std::vector<std::vector<unsigned>> &cex) {
 
 aiger *witness_construction(aiger *model, aiger *safety,
                             std::vector<std::vector<unsigned>> &cex,
-                            unsigned store, unsigned og_J, unsigned og_gates,
+                            unsigned store, unsigned stored, unsigned og_J,
+                            unsigned og_gates,
                             const std::vector<unsigned> &original,
                             const std::vector<unsigned> &copy) {
   L3 << "Constructing liveness witness from safety invariant";
@@ -92,6 +97,7 @@ aiger *witness_construction(aiger *model, aiger *safety,
   }
   for (auto l : original)
     m(l, latch(witness));
+  m(stored, 1);
   for (int i = 0; i < og_gates; ++i) {
     unsigned a = safety->ands[i].lhs;
     unsigned x = safety->ands[i].rhs0;
@@ -107,7 +113,7 @@ aiger *witness_construction(aiger *model, aiger *safety,
     aiger_symbol *wl = aiger_is_latch(witness, map[original[i]]);
     assert(wl);
     wl->reset = map[sl->reset];
-    wl->next = map[sl->next];
+    wl->next = conj(witness, map[sl->next], map[sl->next]);
   }
   for (auto &c : constraints(safety)) {
     assert(map[c.lit] != INVALID_LIT);
@@ -123,16 +129,29 @@ aiger *witness_construction(aiger *model, aiger *safety,
 
   // reencode all ands as the invariant could use original gates
   for (auto [a, x, y] : ands(safety)) {
-    L5 << a << "(" << (2*witness->maxvar + 2) << ") =" << x << "(" << map[x] << ") & " << y
-       << "(" << map[y] << ")";
+    L5 << a << "(" << (2 * witness->maxvar + 2) << ") =" << x << "(" << map[x]
+       << ") & " << y << "(" << map[y] << ")";
     assert(map[x] != INVALID_LIT);
     assert(map[y] != INVALID_LIT);
     m(a, conj(witness, map[x], map[y]), true);
   }
 
+  // {
+  //   aiger_symbol *sl = aiger_is_latch(safety, stored);
+  //   assert(sl);
+  //   aiger_symbol *wl = aiger_is_latch(witness, map[stored]);
+  //   assert(wl);
+  //   assert(map[sl->reset] != INVALID_LIT);
+  //   assert(map[sl->next] != INVALID_LIT);
+  //   // wl->reset = map[sl->reset];
+  //   // wl->next = map[sl->next];
+  //   wl->reset = 1;
+  //   wl->next = 1;
+  // }
+
   unsigned J{map[safety->outputs[0].lit]};
   unsigned violations[] = {J};
-  aiger_add_justice(witness, 1, violations, "Plts_Lc/L1");
+  aiger_add_justice(witness, 1, violations, "Plts_Lc/L_L/L1");
 
   return witness;
 }
@@ -140,7 +159,7 @@ aiger *witness_construction(aiger *model, aiger *safety,
 bool lts(aiger *model, aiger *&witness,
          std::vector<std::vector<unsigned>> &cex) {
   L3 << "Reducing liveness to safety";
-  auto [safety, store, J, original, copy] = safety_reduction(model);
+  auto [safety, store, stored, J, original, copy] = safety_reduction(model);
   aiger_open_and_write_to_file(safety, "l2s.aag");
 
   bool bug = ic3(safety, cex);
@@ -148,7 +167,7 @@ bool lts(aiger *model, aiger *&witness,
   if (bug)
     cex_construction(model, cex);
   else
-    witness = witness_construction(model, safety, cex, store, J,
+    witness = witness_construction(model, safety, cex, store, stored, J,
                                    model->num_ands, original, copy);
   return bug;
 }
