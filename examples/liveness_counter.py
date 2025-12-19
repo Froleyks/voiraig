@@ -8,16 +8,8 @@ if len(argv) < 3:
     exit(1)
 n = int(argv[1])
 live_bit = int(argv[2])
-add_input = int(len(argv) > 3) and argv[23] != '0'
+add_input = int(len(argv) > 3) and argv[3] != '0'
 assert 0 <= live_bit < n
-
-v = 2
-if add_input:
-    v += 2
-L = []
-for _ in range(n):
-    L.append(v); v += 2
-J = L[live_bit]^1
 
 gates = []
 def gate(x, y):
@@ -27,6 +19,15 @@ def gate(x, y):
     gates.append(f"{l} {x} {y}")
     return l
 
+v = 2
+if add_input:
+    v += 2
+L = []
+for _ in range(n):
+    L.append(v); v += 2
+J = L[live_bit]^1
+if add_input:
+    J = gate(J, 2)
 
 # Ripple-carry add input
 Lnext = []
