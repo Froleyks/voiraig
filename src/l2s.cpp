@@ -1,4 +1,4 @@
-#include "lts.hpp"
+#include "l2s.hpp"
 #include "aiger.h"
 #include "aiger.hpp"
 #include "ic3.hpp"
@@ -105,6 +105,7 @@ aiger *witness_construction(aiger *model, aiger *safety,
                             const std::vector<unsigned> &original_latches,
                             const std::vector<unsigned> &copy_inputs,
                             const std::vector<unsigned> &copy_latches) {
+  // return safety; // I cannot find this bug with fuzzing
   L3 << "Constructing liveness witness from safety invariant";
   assert(safety->num_inputs == original_inputs.size() + 1);
   assert(safety->num_latches == original_latches.size() + copy_inputs.size() +

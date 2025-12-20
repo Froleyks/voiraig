@@ -4,7 +4,7 @@
 #include "ic3.hpp"
 #include "k_liveness.hpp"
 #include "kind.hpp"
-#include "lts.hpp"
+#include "l2s.hpp"
 #include "options.hpp"
 
 #include "utils.hpp"
