@@ -7,16 +7,15 @@
 #include <vector>
 
 std::vector<unsigned> stabilizers(aiger *model) {
-
   L3 << "stabilizer extraction";
   assert(model);
   const unsigned n = size(model);
   std::vector<unsigned> stable;
   stable.reserve(n - 2);
   std::array<std::vector<int>, 2> u;
-  int var = 1;
+  int var = 2;
   CaDiCaL::Solver s;
-
+  s.clause(-1);
   for (auto &f : u)
     f.resize(n);
   for (int i = 0; i < 2; ++i) {
@@ -24,16 +23,15 @@ std::vector<unsigned> stabilizers(aiger *model) {
     f[0] = 1;
     f[1] = -1;
     for (unsigned l = 2; l < n; l += 2) {
-      if (f[l]) continue;
+      if (f[l]) continue; // set by next
       const int v = var++;
       f[l] = v;
       f[l + 1] = -v;
-      L5 << "setting f for latch" << l << "to" << v;
+      L5 << "u" << i << "[" << l << "] =" << v;
     }
     if (!i)
       for (auto [l, n] : latches(model) | nexts) {
-        std::cout << "latch " << l << " next " << n << " f[n] " << f[n]
-                  << std::endl;
+        L5 << "u" << 1 << "[" << l << "] =" << f[n] << "(next)";
         u[1][l] = f[n];
         u[1][l ^ 1] = f[n ^ 1];
       }

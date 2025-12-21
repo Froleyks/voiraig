@@ -112,8 +112,7 @@ unsigned map_to_next(unsigned l) {
   } else if (kw_is_latch(l)) {
     unsigned idx = l / 2;
     aiger_symbol *s = aiger_is_latch(k_witness_model, l);
-    L4 << "l:" << l << " "
-       << "s->lit: " << s->lit << "/n";
+    L4 << "l:" << l << " " << "s->lit: " << s->lit << "/n";
     unsigned new_next = map_original(s->next);
     return l % 2 ? neg(new_next) : new_next;
   } else if (kw_is_and(l)) {
@@ -132,7 +131,8 @@ static void witness(int kin, aiger *&k_witness_model) {
     not_supported = true;
   }
   if (not_supported) {
-    std::cerr << "Voiraig: Constraints and reset functions not supported with kInd without simple path";
+    std::cerr << "Voiraig: Constraints and reset functions not supported with "
+                 "kInd without simple path";
     exit(1);
   }
   k = kin;

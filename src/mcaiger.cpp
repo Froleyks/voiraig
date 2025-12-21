@@ -39,7 +39,8 @@ static unsigned nrcs;
 static int frame(int k) {
   int res;
   res = k * model->maxvar + 2;
-  if (dcs || rcs || mix) res += (model->num_latches + model->num_inputs) * k * (k - 1) / 2;
+  if (dcs || rcs || mix)
+    res += (model->num_latches + model->num_inputs) * k * (k - 1) / 2;
   return res;
 }
 
@@ -172,7 +173,8 @@ static void ado(unsigned k) {
 static int diff(int k, int l, int i, bool input = false) {
   assert(0 <= i && i < (model->num_latches + model->num_inputs));
   assert(l < k);
-  return frame(k + 1) - (i + input * model->num_latches) - l * (model->num_latches + model->num_inputs) - 1;
+  return frame(k + 1) - (i + input * model->num_latches) -
+         l * (model->num_latches + model->num_inputs) - 1;
 }
 
 static void diffs(unsigned k, unsigned l) {

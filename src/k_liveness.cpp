@@ -67,13 +67,11 @@ build_safety_instance(aiger *model, unsigned k,
   stabilized.reserve(stable.size());
   unsigned Q{1};
   for (auto i : stable) {
-    const unsigned latch_lit = i & ~1u;
-    if (aiger_symbol *l = aiger_is_latch(model, latch_lit)) {
+    if (aiger_symbol *l = aiger_is_latch(model, aiger_strip(i))) {
       L5 << "adding stabilizer for latch" << i;
-      L5 << map;
       assert(l);
-      unsigned c{l->lit ^ (i & 1u)};
-      unsigned n{l->next ^ (i & 1u)};
+      unsigned c{l->lit ^ aiger_sign(i)};
+      unsigned n{l->next ^ aiger_sign(i)};
       assert(map[c] != INVALID_LIT);
       assert(map[n] != INVALID_LIT);
       unsigned stabilizer = eq(safety, map[c], map[n]);
@@ -84,6 +82,7 @@ build_safety_instance(aiger *model, unsigned k,
   Q = impl(safety, Q, aiger_not(map[model->justice[0].lits[0]]));
 
   for (int i = 0; i < k; ++i) {
+    assert(!aiger_sign(lives[i]));
     aiger_symbol *l = aiger_is_latch(safety, lives[i]);
     assert(l);
     assert(l->lit == lives[i]);
@@ -160,37 +159,34 @@ bool build_cex(aiger *model, std::vector<std::vector<unsigned>> &safety_cex,
 }
 
 void build_witness(aiger *&witness, aiger *kWit, aiger *model, unsigned k,
-                   unsigned justice, const std::vector<unsigned> &lives,
+                   const std::vector<unsigned> &lives,
                    const std::vector<unsigned> &stable) {
   L5 << "building witness for k =" << k;
   L5 << stable;
   witness = kWit;
   unsigned equally_stable{1}, less_stable{0};
   for (unsigned c : stable) {
-    const unsigned latch_lit = c & ~1u;
-    aiger_symbol *l = aiger_is_latch(witness, latch_lit);
+    aiger_symbol *l = aiger_is_latch(witness, aiger_strip(c));
     assert(l);
     l->next = conj(witness, l->next, l->next); // alias
-    unsigned n{l->next ^ (c & 1u)};
-    L5 << "comparator" << c << "<=" << n;
+    unsigned n{l->next ^ aiger_sign(c)};
+    L5 << "comparator" << c << "<" << n;
     less_stable =
         disj(witness, less_stable,
              conj(witness, equally_stable, conj(witness, c, aiger_not(n))));
     equally_stable = conj(witness, equally_stable, eq(witness, c, n));
   }
-  unsigned less_live{};
-  for (unsigned i : lives) {
-    aiger_symbol *l = aiger_is_latch(witness, i);
-    assert(l);
-    unsigned c{l->lit ^ (i & 1u)};
-    unsigned n{l->next ^ (i & 1u)};
-    less_live = disj(witness, less_live, conj(witness, c, aiger_not(n)));
+  unsigned more_live{};
+  for (unsigned c : lives) {
+    assert(!aiger_sign(c));
+    aiger_symbol *l = aiger_is_latch(witness, c);
+    unsigned n{l->next};
+    more_live = disj(witness, more_live, conj(witness, aiger_not(c), n));
   }
-  unsigned decreased =
-      disj(witness, less_stable, conj(witness, equally_stable, less_live));
-  unsigned progress = disj(witness, decreased, aiger_not(justice));
-  L1 << "liveness decrease literal" << decreased;
-  unsigned violations[] = {aiger_not(progress)};
+  unsigned increase =
+      disj(witness, less_stable, conj(witness, equally_stable, more_live));
+  L1 << "liveness decrease literal" << increase;
+  unsigned violations[] = {increase};
   aiger_add_justice(witness, 1, violations, nullptr);
 }
 
@@ -221,7 +217,7 @@ bool k_liveness(aiger *model, aiger *&witness,
       aiger_reset(safety);
     } else {
       L3 << "unsat for k =" << k;
-      build_witness(witness, safety, model, k, Q, lives, stabilized);
+      build_witness(witness, safety, model, k, lives, stabilized);
       return false;
     }
   }

@@ -50,6 +50,8 @@ std::ostream &operator<<(std::ostream &out, const std::vector<ternary> &v);
 // Given a ternary state s in expanded representation vec size = num_variables,
 // the value of all and-gates, given by *ands and num_ands, is computed and
 // written to s. The vector s should be sized correctly before this is called.
-void propagate(aiger_and *ands, const unsigned num_ands, std::vector<ternary> &s);
-std::vector<unsigned> reduce(aiger *model, const std::vector<unsigned> &obligations,
-           std::vector<ternary> &s);
+void propagate(aiger_and *ands, const unsigned num_ands,
+               std::vector<ternary> &s);
+std::vector<unsigned> reduce(aiger *model,
+                             const std::vector<unsigned> &obligations,
+                             std::vector<ternary> &s);
