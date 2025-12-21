@@ -20,20 +20,16 @@ safety_reduction(aiger *model) {
   std::vector<unsigned> copy_inputs, copy_latches;
   original_inputs.reserve(model->num_inputs);
   original_latches.reserve(model->num_latches);
-  copy_inputs.reserve(model->num_inputs);
   copy_latches.reserve(model->num_latches);
   for (auto l : inputs(model) | lits)
     original_inputs.push_back(m(l, input(safety)));
   const unsigned store{input(safety, "store")};
   for (auto l : latches(model) | lits)
     original_latches.push_back(m(l, latch(safety)));
-  for (auto l : inputs(model) | lits)
-    copy_inputs.push_back(latch(safety, "i_copy"));
   for (auto l : latches(model) | lits)
     copy_latches.push_back(latch(safety, "l_copy"));
   assert(original_inputs.size() == model->num_inputs);
   assert(original_latches.size() == model->num_latches);
-  assert(copy_inputs.size() == model->num_inputs);
   assert(copy_latches.size() == model->num_latches);
   unsigned stored{latch(safety, "stored")};
   for (auto [a, x, y] : ands(model)) {
@@ -51,20 +47,13 @@ safety_reduction(aiger *model) {
     assert(map[m->next] != INVALID_LIT);
     o->reset = map[m->reset];
     o->next = map[m->next];
-  }
-  for (size_t i = 0; i < copy_inputs.size(); ++i) {
-    aiger_symbol *c = aiger_is_latch(safety, copy_inputs[i]);
-    assert(c);
-    c->next = ite(safety, store, original_inputs[i], copy_inputs[i]);
-  }
-  for (size_t i = 0; i < copy_latches.size(); ++i) {
-    aiger_symbol *c = aiger_is_latch(safety, copy_latches[i]);
-    assert(c);
+    c->reset = 0;
     c->next = ite(safety, store, original_latches[i], copy_latches[i]);
   }
   {
     aiger_symbol *s = aiger_is_latch(safety, stored);
     assert(s);
+    s->reset = 0;
     s->next = disj(safety, stored, store);
   }
 
@@ -76,11 +65,11 @@ safety_reduction(aiger *model) {
   assert(J != INVALID_LIT);
 
   unsigned B = conj(safety, stored, J);
-  for (size_t i = 0; i < original_inputs.size(); ++i)
-    B = conj(safety, B, eq(safety, original_inputs[i], copy_inputs[i]));
-  for (size_t i = 0; i < original_latches.size(); ++i)
-    B = conj(safety, B, eq(safety, original_latches[i], copy_latches[i]));
-  // B = conj(safety, B, eq(safety, nexts[i], copy[i]));
+  for (size_t i = 0; i < original_latches.size(); ++i) {
+    aiger_symbol *o = aiger_is_latch(safety, original_latches[i]);
+    assert(o);
+    B = conj(safety, B, eq(safety, o->next, copy_latches[i]));
+  }
   aiger_add_output(safety, B, "bad");
   return {safety,           store,       stored,      J, original_inputs,
           original_latches, copy_inputs, copy_latches};
@@ -94,7 +83,6 @@ void cex_construction(aiger *model, std::vector<std::vector<unsigned>> &cex) {
   cex[0].resize(model->num_latches);
   for (auto &i : cex | std::views::drop(1))
     i.resize(model->num_inputs);
-  // cex.pop_back();
 }
 
 aiger *witness_construction(aiger *model, aiger *safety,
@@ -105,11 +93,7 @@ aiger *witness_construction(aiger *model, aiger *safety,
                             const std::vector<unsigned> &original_latches,
                             const std::vector<unsigned> &copy_inputs,
                             const std::vector<unsigned> &copy_latches) {
-  // return safety; // I cannot find this bug with fuzzing
   L3 << "Constructing liveness witness from safety invariant";
-  assert(safety->num_inputs == original_inputs.size() + 1);
-  assert(safety->num_latches == original_latches.size() + copy_inputs.size() +
-                                    copy_latches.size() + 1);
   aiger *witness = aiger_init();
   std::vector<unsigned> map(size(safety), INVALID_LIT);
   auto m = [&map](unsigned from, unsigned to,
@@ -121,18 +105,15 @@ aiger *witness_construction(aiger *model, aiger *safety,
     return to;
   };
   m(0, 0);
-  assert((store & 1u) == 0); // store must be even
+  assert(!aiger_sign(store)); // store must be even
   for (auto l : original_inputs)
     m(l, input(witness));
-  std::vector<unsigned> new_I;
-  new_I.reserve(original_inputs.size());
-  for (auto _ : original_inputs)
-    new_I.push_back(input(witness));
   m(store, input(witness, "store"));
-
   for (auto l : original_latches)
     m(l, latch(witness));
   m(stored, 1);
+  assert(witness->num_inputs == model->num_inputs + 1);
+  assert(witness->num_latches == model->num_latches);
 
   for (auto [a, x, y] : ands(safety) | std::views::take(og_gates)) {
     assert(map[a] == INVALID_LIT);
@@ -158,15 +139,9 @@ aiger *witness_construction(aiger *model, aiger *safety,
     aiger_add_constraint(witness, map[c.lit], c.name);
   }
 
-  assert(original_inputs.size() == copy_inputs.size());
-  for (int i = 0; i < copy_inputs.size(); ++i)
-    m(copy_inputs[i], map[original_inputs[i]]);
   assert(original_latches.size() == copy_latches.size());
   for (int i = 0; i < copy_latches.size(); ++i)
     m(copy_latches[i], map[original_latches[i]]);
-  assert(original_inputs.size() == new_I.size());
-  for (int i = 0; i < original_inputs.size(); ++i)
-    m(original_inputs[i], new_I[i], true);
   assert(original_latches.size() == witness->num_latches);
   for (int i = 0; i < original_latches.size(); ++i)
     m(original_latches[i], nexts[i], true);
