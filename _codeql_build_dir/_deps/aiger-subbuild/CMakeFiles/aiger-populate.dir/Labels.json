@@ -1,0 +1,46 @@
+{
+	"sources" : 
+	[
+		{
+			"file" : "/home/runner/work/voiraig/voiraig/_codeql_build_dir/_deps/aiger-subbuild/CMakeFiles/aiger-populate"
+		},
+		{
+			"file" : "/home/runner/work/voiraig/voiraig/_codeql_build_dir/_deps/aiger-subbuild/CMakeFiles/aiger-populate.rule"
+		},
+		{
+			"file" : "/home/runner/work/voiraig/voiraig/_codeql_build_dir/_deps/aiger-subbuild/CMakeFiles/aiger-populate-complete.rule"
+		},
+		{
+			"file" : "/home/runner/work/voiraig/voiraig/_codeql_build_dir/_deps/aiger-subbuild/aiger-populate-prefix/src/aiger-populate-stamp/aiger-populate-build.rule"
+		},
+		{
+			"file" : "/home/runner/work/voiraig/voiraig/_codeql_build_dir/_deps/aiger-subbuild/aiger-populate-prefix/src/aiger-populate-stamp/aiger-populate-configure.rule"
+		},
+		{
+			"file" : "/home/runner/work/voiraig/voiraig/_codeql_build_dir/_deps/aiger-subbuild/aiger-populate-prefix/src/aiger-populate-stamp/aiger-populate-download.rule"
+		},
+		{
+			"file" : "/home/runner/work/voiraig/voiraig/_codeql_build_dir/_deps/aiger-subbuild/aiger-populate-prefix/src/aiger-populate-stamp/aiger-populate-install.rule"
+		},
+		{
+			"file" : "/home/runner/work/voiraig/voiraig/_codeql_build_dir/_deps/aiger-subbuild/aiger-populate-prefix/src/aiger-populate-stamp/aiger-populate-mkdir.rule"
+		},
+		{
+			"file" : "/home/runner/work/voiraig/voiraig/_codeql_build_dir/_deps/aiger-subbuild/aiger-populate-prefix/src/aiger-populate-stamp/aiger-populate-patch.rule"
+		},
+		{
+			"file" : "/home/runner/work/voiraig/voiraig/_codeql_build_dir/_deps/aiger-subbuild/aiger-populate-prefix/src/aiger-populate-stamp/aiger-populate-test.rule"
+		},
+		{
+			"file" : "/home/runner/work/voiraig/voiraig/_codeql_build_dir/_deps/aiger-subbuild/aiger-populate-prefix/src/aiger-populate-stamp/aiger-populate-update.rule"
+		}
+	],
+	"target" : 
+	{
+		"labels" : 
+		[
+			"aiger-populate"
+		],
+		"name" : "aiger-populate"
+	}
+}
