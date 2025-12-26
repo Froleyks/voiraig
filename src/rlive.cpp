@@ -5,84 +5,55 @@
 
 #include "aiger.h"
 #include "ic3.hpp"
+#include "ternary.hpp"
 #include "utils.hpp"
 
 #include <cstdint>
+#include <unordered_map>
 
-static std::vector<bool>
-last_state(aiger *model, const std::vector<std::vector<unsigned>> &cex) {
+// Returns a pair of the two last states. The one violating the liveness signal
+// and the one after it. Both are returned as vectors of Booleans representing
+// the values of latches.
+static std::pair<std::vector<bool>, std::vector<bool>>
+last_states(aiger *model, const std::vector<std::vector<unsigned>> &cex) {
   assert(model);
   assert(!cex.empty());
+  std::vector<bool> not_q, new_reset;
+  not_q.reserve(model->num_latches);
+  new_reset.reserve(model->num_latches);
+  L5 << "replaying trace length" << cex.size() - 1;
+  for (auto x : cex)
+    L5 << x;
 
-  std::vector<uint8_t> values(model->maxvar + 1, 0);
-  values[0] = 0;
-
-  auto lit_value = [&values](unsigned lit) -> bool {
-    const bool v = values[IDX(lit)];
-    return aiger_sign(lit) ? !v : v;
-  };
-
-  // Initialize latches from reset values when available.
-  for (auto &l : latches(model)) {
-    if (l.reset == 1)
-      values[IDX(l.lit)] = 1;
-    else if (l.reset == 0 || l.reset == l.lit)
-      values[IDX(l.lit)] = 0;
-    else
-      values[IDX(l.lit)] = static_cast<uint8_t>(lit_value(l.reset));
+  std::vector<ternary> s(model->maxvar + 1, X);
+  s[0] = X0; // constant false
+  for (auto l : cex[0])
+    s[IDX(l)] = STX(l);
+  for (size_t i = 1; i < cex.size(); ++i) {
+    for (auto i : cex[i])
+      s[IDX(i)] = STX(i);
+    propagate(model->ands, model->num_ands, s);
+    std::vector<std::pair<unsigned, ternary>> updates;
+    updates.reserve(model->num_latches);
+    for (auto [l, n] : latches(model) | nexts)
+      updates.emplace_back(IDX(l), sign(s[IDX(n)], n));
+    L5 << updates;
+    if (i == cex.size() - 1)
+      for (auto l : latches(model) | lits)
+        not_q.push_back(s[IDX(l)] == X1);
+    for (auto [i, v] : updates)
+      s[i] = v;
+    if (i == cex.size() - 1)
+      for (auto l : latches(model) | lits)
+        new_reset.push_back(s[IDX(l)] == X1);
+    L5 << s;
   }
-
-  // Override with the initial latch assignment from the cex.
-  for (unsigned lit : cex[0])
-    values[IDX(lit)] = STV(lit);
-
-  const unsigned bad = output(model);
-
-  auto propagate_ands = [&]() {
-    for (auto &a : ands(model)) {
-      const bool v = lit_value(a.rhs0) && lit_value(a.rhs1);
-      values[IDX(a.lhs)] = static_cast<uint8_t>(v);
-    }
-  };
-
-  auto capture_state = [&]() -> std::vector<bool> {
-    std::vector<bool> state;
-    state.reserve(model->num_latches);
-    for (auto l : latches(model) | lits)
-      state.push_back(values[IDX(l)]);
-    return state;
-  };
-
-  for (size_t step = 1; step < cex.size(); ++step) {
-    for (auto l : inputs(model) | lits)
-      values[IDX(l)] = 0;
-    for (unsigned lit : cex[step])
-      values[IDX(lit)] = STV(lit);
-
-    propagate_ands();
-    if (lit_value(bad))
-      return capture_state();
-
-    std::vector<uint8_t> next_vals;
-    next_vals.reserve(model->num_latches);
-    for (auto &l : latches(model))
-      next_vals.push_back(static_cast<uint8_t>(lit_value(l.next)));
-    for (size_t i = 0; i < model->num_latches; ++i)
-      values[IDX(model->latches[i].lit)] = next_vals[i];
-  }
-
-  if (cex.size() == 1) {
-    propagate_ands();
-    if (lit_value(bad))
-      return capture_state();
-  }
-
-  assert(false && "cex does not reach a bad state");
-  return {};
+  return {not_q, new_reset};
 }
 
 aiger *encode(aiger *model, const std::vector<unsigned> &S,
-              const std::vector<unsigned> &Sn) {
+              const std::vector<unsigned> &Sn,
+              const std::vector<bool> &s = {}) {
   std::vector<unsigned> map(size(model), INVALID_LIT);
   auto m = [&map](unsigned from, unsigned to) -> unsigned {
     assert(map[from] == INVALID_LIT);
@@ -103,14 +74,20 @@ aiger *encode(aiger *model, const std::vector<unsigned> &S,
     assert(map[y] != INVALID_LIT);
     m(a, conj(safety, map[x], map[y]));
   }
+  assert(s.size() == 0 || s.size() == model->num_latches);
+  size_t idx{};
   for (auto l : latches(model)) {
     assert(map[l.lit] != INVALID_LIT);
     assert(map[l.reset] != INVALID_LIT);
     assert(map[l.next] != INVALID_LIT);
-    aiger_symbol *s = aiger_is_latch(safety, map[l.lit]);
-    assert(s);
-    s->reset = map[l.reset];
-    s->next = map[l.next];
+    aiger_symbol *nl = aiger_is_latch(safety, map[l.lit]);
+    assert(nl);
+    nl->next = map[l.next];
+    if (!s.empty()) {
+      assert(idx < s.size());
+      nl->reset = s[idx++];
+    } else
+      nl->reset = map[l.reset];
   }
   for (auto l : constraints(model)) {
     assert(map[l.lit] != INVALID_LIT);
@@ -123,29 +100,55 @@ aiger *encode(aiger *model, const std::vector<unsigned> &S,
   // considered and that the bad is also within there. I am using a (possibly)
   // slightly modified understanding of shoal where the bad is added to the
   // shoal manually.
-  unsigned deep = aiger_not(conj(safety, S));
-  unsigned deep_n = aiger_not(conj(safety, Sn));
+  unsigned deep = S.empty() ? 1 : aiger_not(conj(safety, S));
+  unsigned deep_n = S.empty() ? 1 : aiger_not(conj(safety, Sn));
   aiger_add_constraint(safety, conj(safety, deep, deep_n), "deep");
   const unsigned J{map[model->justice[0].lits[0]]};
   assert(J != INVALID_LIT);
   aiger_add_output(safety, J, "bad");
 
+  aiger_open_and_write_to_file(safety, "rlive_safety.aag");
   return safety;
 }
 
+aiger *build_witness(aiger *model, aiger *safety,
+                     const std::vector<unsigned> &S,
+                     const std::vector<unsigned> &Sn) {
+  return safety;
+}
 
 bool rlive(aiger *model, aiger *&witness,
            std::vector<std::vector<unsigned>> &cex) {
+  L1 << "Running RLive liveness checker";
   std::vector<unsigned> S, Sn;
-  std::vector<std::vector<unsigned>> trace;
-  aiger *safety = encode(model, S, Sn);
-  bool bug = ic3(safety, cex);
-  if (bug) {
+  static std::unordered_map<std::vector<bool>, unsigned> unlive;
+  bool bug{true};
+  std::vector<bool> s;
+  while (bug) {
+    aiger *safety = encode(model, S, Sn, s);
+    std::vector<std::vector<unsigned>> safety_cex;
+    bug = ic3(safety, safety_cex);
+    if (!bug) {
+      witness = build_witness(model, safety, S, Sn);
+      aiger_reset(safety);
+      return false;
+    }
     L3 << "Liveness violation found";
-    std::vector<bool> s = last_state(model, cex);
-
-    return true;
+    auto [not_q, new_reset] = last_states(model, safety_cex);
+    LV5(not_q, new_reset);
+    s = new_reset;
+    if (cex.empty())
+      cex = safety_cex;
+    else // drop the reset state
+      cex.insert(cex.end(), safety_cex.begin() + 1, safety_cex.end());
+    auto [_, inserted] = unlive.emplace(not_q, cex.size());
+    if (!inserted) {
+      L2 << "Found dead loop" << not_q;
+      aiger_reset(safety);
+      return true;
+    }
+    aiger_reset(safety);
   }
-  aiger_reset(safety);
+  assert(false);
   return false;
 }
