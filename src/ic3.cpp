@@ -110,11 +110,12 @@ public:
   // -n for deleted cubes
   // Each cube is also blocked in all previous frames.
   std::vector<Cube> cubes;
-  unsigned B, C = 1;
+  unsigned B{1}, C{1};
   CaDiCaL::Solver *solver;
   Frame(aiger *model) {
     assert(model);
     solver = new CaDiCaL::Solver();
+    solver->declare_more_variables(abs(SAT(2*(model->maxvar+1))));
     // TODO only on demand
     B = output(model);
     LV5(B);

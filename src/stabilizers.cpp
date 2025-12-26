@@ -3,6 +3,7 @@
 #include "cadical.hpp"
 #include "utils.hpp"
 
+#include <algorithm>
 #include <array>
 #include <vector>
 
@@ -15,6 +16,7 @@ std::vector<unsigned> stabilizers(aiger *model) {
   std::array<std::vector<int>, 2> u;
   int var = 2;
   CaDiCaL::Solver s;
+  s.declare_more_variables(n);
   s.clause(-1);
   for (auto &f : u)
     f.resize(n);
