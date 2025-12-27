@@ -9,7 +9,7 @@
 #include "utils.hpp"
 
 #include <cstdint>
-#include <unordered_map>
+#include <set>
 
 // Returns a pair of the two last states. The one violating the liveness signal
 // and the one after it. Both are returned as vectors of Booleans representing
@@ -121,33 +121,38 @@ bool rlive(aiger *model, aiger *&witness,
            std::vector<std::vector<unsigned>> &cex) {
   L1 << "Running RLive liveness checker";
   std::vector<unsigned> S, Sn;
-  static std::unordered_map<std::vector<bool>, unsigned> unlive;
-  bool bug{true};
+  std::vector<std::pair<std::vector<bool>, size_t>> trace;
+  static std::set<std::vector<bool>> unlive;
   std::vector<bool> s;
-  while (bug) {
+  while (true) {
     aiger *safety = encode(model, S, Sn, s);
     std::vector<std::vector<unsigned>> safety_cex;
-    bug = ic3(safety, safety_cex);
-    if (!bug) {
-      witness = build_witness(model, safety, S, Sn);
+    bool bug = ic3(safety, safety_cex);
+    if (bug) { // found not q state
+      L3 << "possible liveness violation found";
+      auto [not_q, new_reset] = last_states(model, safety_cex);
+      LV5(not_q, new_reset);
+      s = new_reset;
+      if (cex.empty())
+        cex = safety_cex;
+      else {
+        // drop the reset state
+        cex.insert(cex.end(), safety_cex.begin() + 1, safety_cex.end());
+        trace.emplace_back(not_q, cex.size());
+      }
+      auto [_, inserted] = unlive.emplace(not_q);
+      if (!inserted) {
+        L2 << "Found dead loop" << not_q;
+        aiger_reset(safety);
+        return true;
+      }
+      aiger_reset(safety);
+    } else {
+      trace.pop_back();
+      cex.resize(trace.back().second);
       aiger_reset(safety);
       return false;
     }
-    L3 << "Liveness violation found";
-    auto [not_q, new_reset] = last_states(model, safety_cex);
-    LV5(not_q, new_reset);
-    s = new_reset;
-    if (cex.empty())
-      cex = safety_cex;
-    else // drop the reset state
-      cex.insert(cex.end(), safety_cex.begin() + 1, safety_cex.end());
-    auto [_, inserted] = unlive.emplace(not_q, cex.size());
-    if (!inserted) {
-      L2 << "Found dead loop" << not_q;
-      aiger_reset(safety);
-      return true;
-    }
-    aiger_reset(safety);
   }
   assert(false);
   return false;
