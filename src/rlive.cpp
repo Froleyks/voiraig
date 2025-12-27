@@ -26,12 +26,12 @@ static std::pair<unsigned, unsigned>
 constrain_transition(aiger *model, unsigned shoal_start) {
   assert(model);
   const unsigned shoal = output(model);
-    const unsigned shoal_end = model->num_ands;
+  const unsigned shoal_end = model->num_ands;
   assert(shoal_start <= shoal_end);
 
   std::vector<unsigned> map(size(model), INVALID_LIT);
   auto m = [&map](unsigned from, unsigned to) -> unsigned {
-    LV5(from, to,map.size());
+    LV5(from, to, map.size());
     assert(from < map.size());
     map[from] = to;
     map[aiger_not(from)] = aiger_not(to);
@@ -160,10 +160,23 @@ aiger *encode(aiger *model, const std::vector<unsigned> &S,
   return safety;
 }
 
-aiger *build_witness(aiger *model, aiger *safety,
-                     const std::vector<unsigned> &S,
+aiger *build_witness(aiger *model, const std::vector<unsigned> &S,
                      const std::vector<unsigned> &Sn) {
-  return safety;
+  assert(model);
+  assert(model->num_justice == 1);
+  assert(S.size() == Sn.size());
+  unsigned increase = 0;
+  unsigned prefix_equal = 1;
+  for (size_t i = 0; i < S.size(); ++i) {
+    const unsigned sn = Sn[i];
+    const unsigned s = S[i];
+    const unsigned gt_bit = conj(model, sn, aiger_not(s));
+    const unsigned gt_here = conj(model, prefix_equal, gt_bit);
+    increase = disj(model, increase, gt_here);
+    prefix_equal = conj(model, prefix_equal, eq(model, sn, s));
+  }
+  model->justice[0].lits[0] = increase;
+  return model;
 }
 
 bool rlive(aiger *model, aiger *&witness,
@@ -172,6 +185,10 @@ bool rlive(aiger *model, aiger *&witness,
   std::vector<unsigned> S, Sn;
   std::vector<std::pair<std::vector<bool>, size_t>> stack;
   static std::set<std::vector<bool>> unlive;
+  std::vector<unsigned> og_reset;
+  og_reset.reserve(model->num_latches);
+  for (auto [_, r] : latches(model) | resets)
+    og_reset.push_back(r);
   std::vector<bool> s{};
   stack.emplace_back(s, 0); // initial reset
   while (true) {
@@ -192,11 +209,10 @@ bool rlive(aiger *model, aiger *&witness,
       s = new_reset;
       if (cex.empty())
         cex = safety_cex;
-      else {
+      else
         // drop the reset state
         cex.insert(cex.end(), safety_cex.begin() + 1, safety_cex.end());
-        stack.emplace_back(not_q, cex.size());
-      }
+      stack.emplace_back(not_q, cex.size());
       auto [_, inserted] = unlive.emplace(not_q);
       if (!inserted) {
         // I don't need to check if not_q is still on the current branch,
@@ -209,6 +225,12 @@ bool rlive(aiger *model, aiger *&witness,
       stack.pop_back();
       if (stack.empty()) {
         L3 << "liveness proven";
+        unsigned i{};
+        for (auto &l : latches(model))
+          l.reset = og_reset[i++];
+        for (auto &l : constraints(model))
+          l.lit = 1; // remove shoal constraints
+        witness = build_witness(model, S, Sn);
         return false;
       }
       cex.resize(stack.back().second);
