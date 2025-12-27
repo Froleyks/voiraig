@@ -11,6 +11,55 @@
 #include <cstdint>
 #include <set>
 
+static void to_safety(aiger *model) {
+  assert(model);
+  assert(model->num_justice);
+  const unsigned J = model->justice[0].lits[0];
+  if (model->num_outputs) {
+    model->outputs[0].lit = J;
+  } else {
+    aiger_add_output(model, J, "bad");
+  }
+}
+
+static std::pair<unsigned, unsigned>
+constrain_transition(aiger *model, unsigned shoal_start) {
+  assert(model);
+  const unsigned shoal = output(model);
+    const unsigned shoal_end = model->num_ands;
+  assert(shoal_start <= shoal_end);
+
+  std::vector<unsigned> map(size(model), INVALID_LIT);
+  auto m = [&map](unsigned from, unsigned to) -> unsigned {
+    LV5(from, to,map.size());
+    assert(from < map.size());
+    map[from] = to;
+    map[aiger_not(from)] = aiger_not(to);
+    return to;
+  };
+  m(0, 0);
+  // assumption IC3 does not include inputs in the invariant?
+  // for (auto x : inputs(model) | lits)
+  //   m(x, x); // TODO not sure about this
+  for (auto [l, n] : latches(model) | nexts)
+    m(l, n);
+  for (auto x : ands(model))
+    m(x.lhs, x.lhs);
+
+  for (int i = shoal_start; i < shoal_end; ++i) {
+    aiger_and *a = model->ands + i;
+    assert(map[a->rhs0] != INVALID_LIT);
+    assert(map[a->rhs1] != INVALID_LIT);
+    m(a->lhs, conj(model, map[a->rhs0], map[a->rhs1]));
+  }
+
+  const unsigned shoal_n = map[shoal];
+  assert(shoal_n != INVALID_LIT);
+  aiger_add_constraint(model, conj(model, aiger_not(shoal), aiger_not(shoal_n)),
+                       "shoal");
+  return {shoal, shoal_n};
+}
+
 // Returns a pair of the two last states. The one violating the liveness signal
 // and the one after it. Both are returned as vectors of Booleans representing
 // the values of latches.
@@ -21,7 +70,7 @@ last_states(aiger *model, const std::vector<std::vector<unsigned>> &cex) {
   std::vector<bool> not_q, new_reset;
   not_q.reserve(model->num_latches);
   new_reset.reserve(model->num_latches);
-  L5 << "replaying trace length" << cex.size() - 1;
+  L5 << "replaying stack length" << cex.size() - 1;
   for (auto x : cex)
     L5 << x;
 
@@ -121,13 +170,21 @@ bool rlive(aiger *model, aiger *&witness,
            std::vector<std::vector<unsigned>> &cex) {
   L1 << "Running RLive liveness checker";
   std::vector<unsigned> S, Sn;
-  std::vector<std::pair<std::vector<bool>, size_t>> trace;
+  std::vector<std::pair<std::vector<bool>, size_t>> stack;
   static std::set<std::vector<bool>> unlive;
-  std::vector<bool> s;
+  std::vector<bool> s{};
+  stack.emplace_back(s, 0); // initial reset
   while (true) {
-    aiger *safety = encode(model, S, Sn, s);
+    if (s.size()) { // adjust reset
+      assert(s.size() == model->num_latches);
+      unsigned i = 0;
+      for (auto &l : latches(model))
+        l.reset = s[i++];
+    }
+    to_safety(model);
     std::vector<std::vector<unsigned>> safety_cex;
-    bool bug = ic3(safety, safety_cex);
+    unsigned shoal_start;
+    bool bug = ic3(model, safety_cex, &shoal_start);
     if (bug) { // found not q state
       L3 << "possible liveness violation found";
       auto [not_q, new_reset] = last_states(model, safety_cex);
@@ -138,20 +195,27 @@ bool rlive(aiger *model, aiger *&witness,
       else {
         // drop the reset state
         cex.insert(cex.end(), safety_cex.begin() + 1, safety_cex.end());
-        trace.emplace_back(not_q, cex.size());
+        stack.emplace_back(not_q, cex.size());
       }
       auto [_, inserted] = unlive.emplace(not_q);
       if (!inserted) {
+        // I don't need to check if not_q is still on the current branch,
+        // because if it where closed then we would have added a shoal blocking
+        // it.
         L2 << "Found dead loop" << not_q;
-        aiger_reset(safety);
         return true;
       }
-      aiger_reset(safety);
     } else {
-      trace.pop_back();
-      cex.resize(trace.back().second);
-      aiger_reset(safety);
-      return false;
+      stack.pop_back();
+      if (stack.empty()) {
+        L3 << "liveness proven";
+        return false;
+      }
+      cex.resize(stack.back().second);
+      s = stack.back().first;
+      auto [shoal, shoal_n] = constrain_transition(model, shoal_start);
+      S.push_back(shoal);
+      Sn.push_back(shoal_n);
     }
   }
   assert(false);

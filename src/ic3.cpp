@@ -351,7 +351,9 @@ int forwardCubes(aiger *model, std::vector<Frame> &frames) {
   return 0;
 }
 
-bool ic3(aiger *model, std::vector<std::vector<unsigned>> &cex) {
+bool ic3(aiger *model, std::vector<std::vector<unsigned>> &cex,
+         unsigned *first_added_gate) {
+  if (first_added_gate) *first_added_gate = INVALID_LIT;
   if (model->num_constraints > 1) {
     unsigned C = conj(model, constraints(model) | lits);
     model->constraints[0].lit = C;
@@ -369,6 +371,7 @@ bool ic3(aiger *model, std::vector<std::vector<unsigned>> &cex) {
         L3 << "Proven safety at" << frames.size() - 1;
         // cubes.insert(cubes.end(), frames.rbegin()[1].cubes.begin(),
         // frames.rbegin()[1].cubes.end());
+        if (first_added_gate) *first_added_gate = model->num_ands;
         unsigned badCubes = 0;
         for (unsigned i = converged; i < frames.size(); ++i)
           badCubes += frames[i].cubes.size();
