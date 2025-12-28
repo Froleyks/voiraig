@@ -9,7 +9,7 @@
 #include "utils.hpp"
 
 #include <cstdint>
-#include <set>
+#include <unordered_set>
 
 static void to_safety(aiger *model) {
   assert(model);
@@ -22,8 +22,8 @@ static void to_safety(aiger *model) {
   }
 }
 
-static std::pair<unsigned, unsigned>
-constrain_transition(aiger *model, unsigned shoal_start) {
+static std::pair<unsigned, unsigned> constrain_shoal(aiger *model,
+                                                     unsigned shoal_start) {
   L5 << "constraining transition with shoal" << aiger_not(output(model));
   assert(model);
   const unsigned shoal = aiger_not(output(model));
@@ -67,7 +67,7 @@ constrain_transition(aiger *model, unsigned shoal_start) {
 }
 
 static std::pair<unsigned, unsigned>
-constrain_transition_state(aiger *model, const std::vector<bool> &not_q) {
+constrain_dead_state(aiger *model, const std::vector<bool> &not_q) {
   L5 << "constraining dead state" << not_q;
   assert(model);
   assert(not_q.size() == model->num_latches);
@@ -152,87 +152,87 @@ aiger *build_witness(aiger *model, const std::vector<unsigned> &S,
 bool rlive(aiger *model, aiger *&witness,
            std::vector<std::vector<unsigned>> &cex) {
   L1 << "Running rlive liveness checker";
+  struct search_state {
+    std::vector<bool> not_q;
+    std::vector<bool> next;
+    size_t cex_size;
+  };
+  std::vector<search_state> stack;
+  stack.emplace_back(std::vector<bool>{}, std::vector<bool>{}, 0);
   std::vector<unsigned> S, Sn;
-  std::vector<std::tuple<std::vector<bool>, std::vector<bool>, size_t>> stack;
-  static std::set<std::vector<bool>> unlive;
-  for (auto &l : latches(model)) // alias
-    l.next = conj(model, l.next, l.next);
+  std::unordered_set<std::vector<bool>> visited;
   unsigned num_og_constraints = model->num_constraints;
   std::vector<unsigned> og_reset;
   og_reset.reserve(model->num_latches);
   for (auto [_, r] : latches(model) | resets)
     og_reset.push_back(r);
-  std::vector<bool> s{};
-  while (true) {
-    if (s.size()) { // adjust reset
-      assert(s.size() == model->num_latches);
-      unsigned i = 0;
+  for (auto &l : latches(model)) // alias
+    l.next = conj(model, l.next, l.next);
+  while (!stack.empty()) {
+    auto [violation, next, depth] = stack.back();
+    cex.resize(depth);
+    if (violation == next) {
+      // initial state, reset to original reset
+      assert(og_reset.size() == model->num_latches);
+      unsigned i{};
       for (auto &l : latches(model))
-        l.reset = s[i++];
+        l.reset = og_reset[i++];
+    } else {
+      assert(next.size() == model->num_latches);
+      unsigned i{};
+      for (auto &l : latches(model))
+        l.reset = next[i++];
     }
     to_safety(model);
     std::vector<std::vector<unsigned>> safety_cex;
     unsigned shoal_start;
-    L5 << "starting search for not q state from reset" << s;
-    aiger_open_and_write_to_file(model, "rlive_safety.aag");
+    L5 << "starting search for not q state from reset" << next;
+    aiger_open_and_write_to_file(model, "rlive_safety.aag"); // TODO remove
     bool bug = ic3(model, safety_cex, &shoal_start);
     if (bug) { // found not q state
       L3 << "possible liveness violation found";
-      auto [not_q, new_reset] = last_states(model, safety_cex);
-      LV5(not_q, new_reset);
-      s = new_reset;
+      auto [violation, next] = last_states(model, safety_cex);
+      LV5(violation, next);
       if (cex.empty()) {
         cex = safety_cex;
-        std::vector<bool> pseudo_violation;
-        pseudo_violation.reserve(model->num_latches);
-        assert(cex[0].size() == model->num_latches);
-        for (auto l : cex[0])
-          pseudo_violation.push_back(!aiger_sign(l));
-        stack.emplace_back(pseudo_violation, pseudo_violation, 0);
-        L5 << "push not_q" << pseudo_violation << "new reset"
-           << pseudo_violation << "cex size" << cex.size();
       } else // drop the reset state
         cex.insert(cex.end(), safety_cex.begin() + 1, safety_cex.end());
-      stack.emplace_back(not_q, new_reset, cex.size());
-      L5 << "push not_q" << not_q << "new reset" << new_reset << "cex size"
-         << cex.size();
-      auto [_, inserted] = unlive.emplace(not_q);
+      stack.emplace_back(violation, next, cex.size());
+      L5 << "push" << violation << " -> " << next << "depth" << cex.size();
+      auto [_, inserted] = visited.insert(violation);
       if (!inserted) {
         // I don't need to check if not_q is still on the current branch,
         // because if it where closed then we would have added a shoal blocking
         // it.
-        L2 << "Found dead loop" << not_q;
+        L2 << "Found dead loop around" << violation;
         return true;
       }
     } else {
-      L5 << "no not q state found from reset" << s;
-      if (stack.size() == 1) {
-        L3 << "liveness proven";
-        unsigned i{};
-        for (auto &l : latches(model))
-          l.reset = og_reset[i++];
-        for (auto &l : // remove shoal constraints
-             constraints(model) | std::views::drop(num_og_constraints))
-          l.lit = 1;
-        std::vector<unsigned> S_copy{S};
-        model->outputs[0].lit = aiger_not(disj(model, S_copy));
-        witness = build_witness(model, S, Sn);
-        return false;
-      }
-      auto [not_q, new_reset, cex_size] = stack.back();
+      L5 << "no not q state found from reset" << next;
+      L5 << "pop" << violation << "->" << next << "depth" << cex.size();
       stack.pop_back();
-      L5 << "pop not_q" << not_q << "new reset" << new_reset << "cex size"
-         << cex_size;
-      auto [shoal, shoal_n] = constrain_transition(model, shoal_start);
+      auto [shoal, shoal_n] = constrain_shoal(model, shoal_start);
       S.push_back(shoal);
       Sn.push_back(shoal_n);
-      auto [dead, dead_n] = constrain_transition_state(model, not_q);
-      S.push_back(dead);
-      Sn.push_back(dead_n);
-      cex.resize(cex_size);
-      if (stack.size()) s = std::get<1>(stack.back());
+      if (violation != next) {
+        auto [dead, dead_n] = constrain_dead_state(model, violation);
+        S.push_back(dead);
+        Sn.push_back(dead_n);
+      }
     }
   }
-  assert(false);
+
+  L3 << "liveness proven";
+  for (auto &l : // remove shoal constraints
+       constraints(model) | std::views::drop(num_og_constraints))
+    l.lit = 1;
+  std::vector<unsigned> S_copy{S};
+  unsigned S_region = S_copy.empty() ? 1 : disj(model, S_copy);
+  LV5(S_region);
+  if (model->num_outputs)
+    model->outputs[0].lit = aiger_not(S_region);
+  else
+    aiger_add_output(model, aiger_not(S_region), "liveness");
+  witness = build_witness(model, S, Sn);
   return false;
 }
