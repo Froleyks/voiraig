@@ -23,21 +23,10 @@ static void to_safety(aiger *model) {
 }
 
 static std::pair<unsigned, unsigned>
-constrain_transition(aiger *model, const std::vector<bool> &not_q,
-                     unsigned shoal_start) {
-  L5 << "manually adding" << not_q << "to shoal" << aiger_not(output(model));
+constrain_transition(aiger *model, unsigned shoal_start) {
+  L5 << "constraining transition with shoal" << aiger_not(output(model));
   assert(model);
-  std::vector<unsigned> q_violation;
-  q_violation.reserve(model->num_latches);
-  // LV5(not_q);
-  assert(model->num_latches == not_q.size());
-  unsigned i{};
-  for (auto l : latches(model) | lits) {
-    q_violation.push_back(l ^ (not_q[i++] ? 0u : 1u));
-  }
-  LV5(q_violation);
-  const unsigned shoal =
-      disj(model, conj(model, q_violation), aiger_not(output(model)));
+  const unsigned shoal = aiger_not(output(model));
   const unsigned shoal_end = model->num_ands;
   assert(shoal_start <= shoal_end);
 
@@ -58,7 +47,7 @@ constrain_transition(aiger *model, const std::vector<bool> &not_q,
   for (auto x : ands(model))
     m(x.lhs, x.lhs);
 
-  // I feel like I get points to a gate and modify before using it quite a bit
+  // I feel like I get pointers to a gate and modify before using it quite a bit
   // in my code... Those are all bugs.
   for (int i = shoal_start; i < shoal_end; ++i) {
     aiger_and a = model->ands[i];
@@ -75,6 +64,28 @@ constrain_transition(aiger *model, const std::vector<bool> &not_q,
   aiger_add_constraint(model, aiger_not(shoal), "shoal");
   L5 << "constrained with shoal literals" << shoal << shoal_n;
   return {shoal, shoal_n};
+}
+
+static std::pair<unsigned, unsigned>
+constrain_transition_state(aiger *model, const std::vector<bool> &not_q) {
+  L5 << "constraining dead state" << not_q;
+  assert(model);
+  assert(not_q.size() == model->num_latches);
+  std::vector<unsigned> dead_lits;
+  std::vector<unsigned> dead_n_lits;
+  dead_lits.reserve(not_q.size());
+  dead_n_lits.reserve(not_q.size());
+  size_t i = 0;
+  for (auto [l, n] : latches(model) | nexts) {
+    const bool val = not_q[i++];
+    dead_lits.push_back(val ? l : aiger_not(l));
+    dead_n_lits.push_back(val ? n : aiger_not(n));
+  }
+  const unsigned dead = conj(model, dead_lits);
+  const unsigned dead_n = conj(model, dead_n_lits);
+  aiger_add_constraint(model, aiger_not(dead), "dead");
+  L5 << "constrained dead state" << dead << dead_n;
+  return {dead, dead_n};
 }
 
 // Returns a pair of the two last states. The one violating the liveness signal
@@ -123,24 +134,29 @@ aiger *build_witness(aiger *model, const std::vector<unsigned> &S,
   assert(S.size() == Sn.size());
   unsigned increase = 0;
   unsigned prefix_equal = 1;
+  L4 << "encoding shoal comparison";
   for (size_t i = 0; i < S.size(); ++i) {
-    const unsigned sn = Sn[i];
     const unsigned s = S[i];
-    const unsigned gt_bit = conj(model, sn, aiger_not(s));
+    const unsigned sn = Sn[i];
+    L5 << s << sn;
+    const unsigned gt_bit = conj(model, s, aiger_not(sn));
     const unsigned gt_here = conj(model, prefix_equal, gt_bit);
     increase = disj(model, increase, gt_here);
     prefix_equal = conj(model, prefix_equal, eq(model, sn, s));
   }
+  LV4(increase);
   model->justice[0].lits[0] = increase;
   return model;
 }
 
 bool rlive(aiger *model, aiger *&witness,
            std::vector<std::vector<unsigned>> &cex) {
-  L1 << "Running RLive liveness checker";
+  L1 << "Running rlive liveness checker";
   std::vector<unsigned> S, Sn;
   std::vector<std::tuple<std::vector<bool>, std::vector<bool>, size_t>> stack;
   static std::set<std::vector<bool>> unlive;
+  for (auto &l : latches(model)) // alias
+    l.next = conj(model, l.next, l.next);
   unsigned num_og_constraints = model->num_constraints;
   std::vector<unsigned> og_reset;
   og_reset.reserve(model->num_latches);
@@ -207,9 +223,12 @@ bool rlive(aiger *model, aiger *&witness,
       stack.pop_back();
       L5 << "pop not_q" << not_q << "new reset" << new_reset << "cex size"
          << cex_size;
-      auto [shoal, shoal_n] = constrain_transition(model, not_q, shoal_start);
+      auto [shoal, shoal_n] = constrain_transition(model, shoal_start);
       S.push_back(shoal);
       Sn.push_back(shoal_n);
+      auto [dead, dead_n] = constrain_transition_state(model, not_q);
+      S.push_back(dead);
+      Sn.push_back(dead_n);
       cex.resize(cex_size);
       if (stack.size()) s = std::get<1>(stack.back());
     }
