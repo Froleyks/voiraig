@@ -58,6 +58,89 @@ void reset(aiger *model, CaDiCaL::Solver *frame) {
   }
 }
 
+static void addEquiv(CaDiCaL::Solver *frame, unsigned lhs, unsigned rhs) {
+  assert(lhs > 1);
+  if (lhs == rhs) return;
+  const int lhs_lit = SAT(lhs);
+  if (rhs == 0) {
+    frame->add(-lhs_lit);
+    frame->add(0);
+    return;
+  }
+  if (rhs == 1) {
+    frame->add(lhs_lit);
+    frame->add(0);
+    return;
+  }
+  const int rhs_lit = SAT(rhs);
+  frame->add(-lhs_lit);
+  frame->add(rhs_lit);
+  frame->add(0);
+  frame->add(lhs_lit);
+  frame->add(-rhs_lit);
+  frame->add(0);
+}
+
+void reset_next(aiger *model, CaDiCaL::Solver *frame,
+                std::vector<unsigned> &map) {
+  L3 << "enforcing reset-next in" << frame;
+  map.resize(model->maxvar + 1, INVALID_LIT);
+  map[0] = 0;
+  unsigned next_var = model->maxvar + 1;
+  for (size_t i = 0; i < model->num_inputs; ++i) {
+    const aiger_symbol *input = model->inputs + i;
+    map[input->lit >> 1] = next_var++;
+    L5 << "set input" << input->lit << "to" << map[input->lit >> 1];
+  }
+  for (size_t i = 0; i < model->num_latches; ++i) {
+    const aiger_symbol *latch = model->latches + i;
+    map[latch->lit >> 1] = next_var++;
+  }
+  for (size_t i = 0; i < model->num_ands; ++i) {
+    const aiger_and *a = model->ands + i;
+    map[a->lhs >> 1] = next_var++;
+  }
+  const unsigned new_maxvar = next_var - 1;
+  frame->declare_more_variables(abs(SAT(2 * (new_maxvar + 1))));
+
+  auto map_lit = [&map](unsigned lit) -> unsigned {
+    if (lit <= 1) return lit;
+    const unsigned var = lit >> 1;
+    const unsigned mapped = map[var];
+    assert(mapped != INVALID_LIT);
+    if (!mapped) return lit;
+    return (mapped << 1) | (lit & 1u);
+  };
+
+  for (size_t i = 0; i < model->num_ands; ++i) {
+    const aiger_and *a = model->ands + i;
+    gate(frame, map_lit(a->lhs), map_lit(a->rhs0), map_lit(a->rhs1));
+  }
+
+  if (model->num_constraints) {
+    frame->add(SAT(map_lit(model->constraints[0].lit)));
+    frame->add(0);
+  }
+
+  for (size_t i = 0; i < model->num_latches; ++i) {
+    const aiger_symbol *latch = model->latches + i;
+    const unsigned prev = map_lit(latch->lit);
+    const unsigned reset_lit = map_lit(latch->reset);
+    if (prev != reset_lit) addEquiv(frame, prev, reset_lit);
+  }
+
+  for (size_t i = 0; i < model->num_latches; ++i) {
+    const aiger_symbol *latch = model->latches + i;
+    if (latch-> lit == latch->reset) continue;
+    addEquiv(frame, latch->lit, map_lit(latch->next));
+  }
+
+  // only bad transitions
+  frame->add(SAT(map_lit(output(model))));
+  frame->add(0);
+
+}
+
 void initialize(aiger *model, CaDiCaL::Solver *frame) {
   frame->add(SAT(1));
   frame->add(0);
@@ -115,7 +198,7 @@ public:
   Frame(aiger *model) {
     assert(model);
     solver = new CaDiCaL::Solver();
-    solver->declare_more_variables(abs(SAT(2*(model->maxvar+1))));
+    solver->declare_more_variables(abs(SAT(2 * (model->maxvar + 1))));
     // TODO only on demand
     B = output(model);
     LV5(B);
@@ -352,7 +435,7 @@ int forwardCubes(aiger *model, std::vector<Frame> &frames) {
 }
 
 bool ic3(aiger *model, std::vector<std::vector<unsigned>> &cex,
-         unsigned *first_added_gate) {
+         unsigned *first_added_gate, bool use_reset_next) {
   if (first_added_gate) *first_added_gate = INVALID_LIT;
   if (model->num_constraints > 1) {
     unsigned C = conj(model, constraints(model) | lits);
@@ -362,7 +445,11 @@ bool ic3(aiger *model, std::vector<std::vector<unsigned>> &cex,
   std::vector<Frame> frames;
   L2 << "appending frame" << frames.size();
   frames.emplace_back(model);
-  reset(model, frames[0].solver);
+  std::vector<unsigned> map;
+  if (use_reset_next)
+    reset_next(model, frames[0].solver, map);
+  else
+    reset(model, frames[0].solver);
   while (true) {
     Cube b = bad(model, frames.back(), frames.size() > 1);
     if (b == bot) {
@@ -402,8 +489,29 @@ bool ic3(aiger *model, std::vector<std::vector<unsigned>> &cex,
       const size_t k = frames.size() - obligations.size();
       if (!k) {
         L3 << "found CEX";
-        cex.reserve(inputs.size() + 1);
-        cex.emplace_back(std::move(obligations.back()));
+        if (use_reset_next) {
+          cex.reserve(inputs.size() + 2);
+          cex.emplace_back();
+          for (size_t i = 0; i < model->num_latches; ++i) {
+            const aiger_symbol *latch = model->latches + i;
+            assert(map[latch->lit >> 1] != INVALID_LIT);
+            unsigned s = SAT(map[latch->lit >> 1] << 1);
+            bool v = frames[0].solver->val(s) > 0;
+            cex[0].push_back(latch->lit | (v ? 0u : 1u));
+          }
+
+          cex.emplace_back();
+          for (size_t i = 0; i < model->num_inputs; ++i) {
+            const aiger_symbol *input = model->inputs + i;
+            assert(map[input->lit >> 1] != INVALID_LIT);
+            unsigned s = SAT(map[input->lit >> 1] << 1);
+            bool v = frames[0].solver->val(s) > 0;
+            cex[1].push_back(input->lit | (v ? 0u : 1u));
+          }
+        } else {
+          cex.reserve(inputs.size() + 1);
+          cex.emplace_back(std::move(obligations.back()));
+        }
         for (int i = inputs.size(); i--;)
           cex.emplace_back(std::move(inputs[i]));
         for (auto &f : frames)
