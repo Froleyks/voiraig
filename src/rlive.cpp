@@ -1,6 +1,13 @@
 // Implementation of the rlive algorithm
 // Xia et al. - 2024 - Avoiding the Shoals - A New Approach to Liveness
 // Checking.pdf
+// Or at least my interpretation of it. The certificate construction is based on
+// encoding the shoals for the current and the next (or simply other) state.
+// Then Q' is defined as a comparison of which shoal is active in the order they
+// where found. Crucially the identified not Q states need to be in some shoal,
+// but not in the same as the shoal generated for their successors.
+// TODO This implementation "grew" soo...
+
 #include "rlive.hpp"
 
 #include "aiger.h"
@@ -8,7 +15,6 @@
 #include "ternary.hpp"
 #include "utils.hpp"
 
-#include <cstdint>
 #include <unordered_set>
 
 static void to_safety(aiger *model) {
@@ -39,16 +45,12 @@ static std::pair<unsigned, unsigned> constrain_shoal(aiger *model,
     return to;
   };
   m(0, 0);
-  // assumption IC3 does not include inputs in the invariant?
-  // for (auto x : inputs(model) | lits)
-  //   m(x, x); // TODO not sure about this
+  // assumption IC3 does not include inputs in the invariant
   for (auto [l, n] : latches(model) | nexts)
     m(l, n);
   for (auto x : ands(model))
     m(x.lhs, x.lhs);
 
-  // I feel like I get pointers to a gate and modify before using it quite a bit
-  // in my code... Those are all bugs.
   for (int i = shoal_start; i < shoal_end; ++i) {
     aiger_and a = model->ands[i];
     L5 << a.lhs << "=" << a.rhs0 << "&" << a.rhs1;
@@ -59,11 +61,99 @@ static std::pair<unsigned, unsigned> constrain_shoal(aiger *model,
 
   const unsigned shoal_n = map[shoal];
   assert(shoal_n != INVALID_LIT);
+  // This would be correct and a stronger constraint for the search, but it
+  // messes with the certificate generation. While that can be fixed for the
+  // proof of the certificate format its not worth the effort now.
   // aiger_add_constraint(model, conj(model, aiger_not(shoal),
   // aiger_not(shoal_n)), "shoal");
+
   aiger_add_constraint(model, aiger_not(shoal), "shoal");
   L5 << "constrained with shoal literals" << shoal << shoal_n;
   return {shoal, shoal_n};
+}
+
+// An encoding of the liveness signal over the next state values is needed to
+// encode the shoal comparison correctly. However, in the checks this needs to
+// actually reference the real next state values. It is therefore not enough to
+// encode Q' over just the next state values when using this construction. In
+// theory it is possible to find a witness without this need, and I may have a
+// practical construction but imposing the arbitrary restriction to the witness
+// seems unwise.
+aiger *next_live(aiger *model) {
+  assert(model);
+  assert(model->num_justice == 1);
+  aiger *extended = aiger_init();
+
+  std::vector<unsigned> map(size(model), INVALID_LIT);
+  auto m = [&map](unsigned from, unsigned to) -> unsigned {
+    assert(from < map.size());
+    map[from] = to;
+    map[aiger_not(from)] = aiger_not(to);
+    return to;
+  };
+  m(0, 0);
+
+  std::vector<unsigned> next_inputs;
+  next_inputs.reserve(model->num_inputs);
+
+  for (unsigned l : inputs(model) | lits)
+    m(l, input(extended));
+  for (unsigned l :
+       inputs(model) | lits) // save because string immediately copied
+    next_inputs.push_back(input(extended, ("<" + std::to_string(l)).c_str()));
+  for (auto [l, n] : latches(model) | nexts)
+    m(l, latch(extended, ("<" + std::to_string(n)).c_str()));
+
+  for (auto [a, x, y] : ands(model)) {
+    assert(map[a] == INVALID_LIT);
+    assert(map[x] != INVALID_LIT);
+    assert(map[y] != INVALID_LIT);
+    m(a, conj(extended, map[x], map[y]));
+  }
+
+  // add back original latch transition and reset
+  for (auto &l : latches(model)) {
+    aiger_symbol *nl = aiger_is_latch(extended, map[l.lit]);
+    assert(nl);
+    assert(map[l.reset] != INVALID_LIT);
+    assert(map[l.next] != INVALID_LIT);
+    nl->next = map[l.next];
+    if (l.reset == l.lit)
+      nl->reset = nl->lit;
+    else
+      nl->reset = map[l.reset];
+  }
+  for (auto &c : constraints(model)) {
+    assert(map[c.lit] != INVALID_LIT);
+    aiger_add_constraint(extended, map[c.lit], c.name);
+  }
+
+  unsigned J = model->justice[0].lits[0];
+  assert(map[J] != INVALID_LIT);
+  unsigned violations[] = {map[J]};
+  aiger_add_justice(extended, 1, violations, "J");
+
+  unsigned i{};
+  for (auto x : inputs(model) | lits)
+    m(x, next_inputs[i++]);
+  for (auto [l, n] : latches(model) | nexts) {
+    m(l, map[n]);
+    L5 << "mapping latch" << l << "to next" << map[n];
+  }
+  for (auto [a, x, y] : ands(model)) {
+    assert(map[a] != INVALID_LIT);
+    assert(map[x] != INVALID_LIT);
+    assert(map[y] != INVALID_LIT);
+    m(a, conj(extended, map[x], map[y]));
+    L5 << a << "=" << x << "&" << y << "mapped to" << map[a] << "=" << map[x]
+       << "&" << map[y];
+  }
+
+  assert(map[J] != INVALID_LIT);
+  violations[0] = map[J];
+  aiger_add_justice(extended, 1, violations, "Jn");
+
+  return extended;
 }
 
 static std::pair<unsigned, unsigned>
@@ -81,8 +171,10 @@ constrain_dead_state(aiger *model, const std::vector<bool> &not_q) {
     dead_lits.push_back(val ? l : aiger_not(l));
     dead_n_lits.push_back(val ? n : aiger_not(n));
   }
-  const unsigned dead = conj(model, dead_lits);
-  const unsigned dead_n = conj(model, dead_n_lits);
+  const unsigned dead =
+      conj(model, model->justice[0].lits[0], conj(model, dead_lits));
+  const unsigned dead_n =
+      conj(model, model->justice[1].lits[0], conj(model, dead_n_lits));
   aiger_add_constraint(model, aiger_not(dead), "dead");
   L5 << "constrained dead state" << dead << dead_n;
   return {dead, dead_n};
@@ -127,10 +219,10 @@ last_states(aiger *model, const std::vector<std::vector<unsigned>> &cex) {
   return {not_q, new_reset};
 }
 
-aiger *build_witness(aiger *model, const std::vector<unsigned> &S,
-                     const std::vector<unsigned> &Sn) {
+void add_shoal_comparator(aiger *model, const std::vector<unsigned> &S,
+                          const std::vector<unsigned> &Sn) {
   assert(model);
-  assert(model->num_justice == 1);
+  assert(model->num_justice >= 1);
   assert(S.size() == Sn.size());
   unsigned increase = 0;
   unsigned prefix_equal = 1;
@@ -138,15 +230,16 @@ aiger *build_witness(aiger *model, const std::vector<unsigned> &S,
   for (size_t i = 0; i < S.size(); ++i) {
     const unsigned s = S[i];
     const unsigned sn = Sn[i];
-    L5 << s << sn;
+    L5 << s << "<" << sn;
     const unsigned gt_bit = conj(model, s, aiger_not(sn));
+    L5 << "gt_bit" << gt_bit;
     const unsigned gt_here = conj(model, prefix_equal, gt_bit);
     increase = disj(model, increase, gt_here);
-    prefix_equal = conj(model, prefix_equal, conj(model, s, sn));
+    prefix_equal =
+        conj(model, prefix_equal, conj(model, aiger_not(s), aiger_not(sn)));
   }
   LV4(increase);
   model->justice[0].lits[0] = increase;
-  return model;
 }
 
 bool rlive(aiger *model, aiger *&witness,
@@ -163,13 +256,17 @@ bool rlive(aiger *model, aiger *&witness,
   stack.emplace_back(std::vector<bool>{}, 0, true);
   std::vector<unsigned> S, Sn;
   std::unordered_set<std::vector<bool>> visited;
-  unsigned num_og_constraints = model->num_constraints;
+  unsigned num_og_inputs{model->num_inputs},
+      num_og_constraints{model->num_constraints},
+      num_og_justice{model->num_justice};
+  for (auto &l : latches(model)) // alias
+    l.next = conj(model, l.next, l.next);
+  aiger *original_model = model;
+  model = next_live(model);
   std::vector<unsigned> og_reset;
   og_reset.reserve(model->num_latches);
   for (auto [_, r] : latches(model) | resets)
     og_reset.push_back(r);
-  for (auto &l : latches(model)) // alias
-    l.next = conj(model, l.next, l.next);
   while (!stack.empty()) {
     auto [violation, depth, original_reset] = stack.back();
     cex.resize(depth);
@@ -211,16 +308,22 @@ bool rlive(aiger *model, aiger *&witness,
         // because if it where closed then we would have added a shoal blocking
         // it.
         L2 << "Found dead loop around" << violation;
-        for (auto x : cex)
-          L5 << x;
+        model->num_inputs = num_og_inputs;
+        for (unsigned &x : cex[0])
+          x -= 2 * num_og_inputs;
+        for (auto &x : cex | std::views::drop(1))
+          x.resize(num_og_inputs);
         cex.pop_back();
+        for (auto x : cex)
+          L3 << x;
         return true;
       }
     } else {
-      L5 << "no not q state found from reset" << next;
+      L5 << "no not q state found from reset" << violation;
       L5 << "pop" << violation << "->" << next << "depth" << cex.size();
       stack.pop_back();
       auto [shoal, shoal_n] = constrain_shoal(model, shoal_start);
+
       S.push_back(shoal);
       Sn.push_back(shoal_n);
 
@@ -233,9 +336,8 @@ bool rlive(aiger *model, aiger *&witness,
   }
 
   L3 << "liveness proven";
-  for (auto &l : // remove shoal constraints
-       constraints(model) | std::views::drop(num_og_constraints))
-    l.lit = 1;
+  model->num_constraints = num_og_constraints;
+  model->num_justice = num_og_justice;
   std::vector<unsigned> S_copy{S};
   unsigned S_region = S_copy.empty() ? 1 : disj(model, S_copy);
   LV5(S_region);
@@ -243,6 +345,7 @@ bool rlive(aiger *model, aiger *&witness,
     model->outputs[0].lit = aiger_not(S_region);
   else
     aiger_add_output(model, aiger_not(S_region), "liveness");
-  witness = build_witness(model, S, Sn);
+  add_shoal_comparator(model, S, Sn);
+  witness = model;
   return false;
 }
