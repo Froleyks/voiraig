@@ -15,6 +15,7 @@
 #include "ternary.hpp"
 #include "utils.hpp"
 
+#include <cstring>
 #include <unordered_set>
 
 static void to_safety(aiger *model) {
@@ -79,7 +80,7 @@ static std::pair<unsigned, unsigned> constrain_shoal(aiger *model,
 // theory it is possible to find a witness without this need, and I may have a
 // practical construction but imposing the arbitrary restriction to the witness
 // seems unwise.
-aiger *next_live(aiger *model) {
+std::pair<aiger *, std::vector<unsigned>> next_live(aiger *model) {
   assert(model);
   assert(model->num_justice == 1);
   aiger *extended = aiger_init();
@@ -98,11 +99,10 @@ aiger *next_live(aiger *model) {
 
   for (unsigned l : inputs(model) | lits)
     m(l, input(extended));
-  for (unsigned l :
-       inputs(model) | lits) // save because string immediately copied
-    next_inputs.push_back(input(extended, ("<" + std::to_string(l)).c_str()));
+  for (unsigned l : inputs(model) | lits)
+    next_inputs.push_back(input(extended));
   for (auto [l, n] : latches(model) | nexts)
-    m(l, latch(extended, ("<" + std::to_string(n)).c_str()));
+    m(l, latch(extended));
 
   for (auto [a, x, y] : ands(model)) {
     assert(map[a] == INVALID_LIT);
@@ -153,7 +153,7 @@ aiger *next_live(aiger *model) {
   violations[0] = map[J];
   aiger_add_justice(extended, 1, violations, "Jn");
 
-  return extended;
+  return {extended, next_inputs};
 }
 
 static std::pair<unsigned, unsigned>
@@ -175,7 +175,7 @@ constrain_dead_state(aiger *model, const std::vector<bool> &not_q) {
       conj(model, model->justice[0].lits[0], conj(model, dead_lits));
   const unsigned dead_n =
       conj(model, model->justice[1].lits[0], conj(model, dead_n_lits));
-  aiger_add_constraint(model, aiger_not(dead), "dead");
+  aiger_add_constraint(model, aiger_not(dead), nullptr);
   L5 << "constrained dead state" << dead << dead_n;
   return {dead, dead_n};
 }
@@ -262,10 +262,10 @@ bool rlive(aiger *model, aiger *&witness,
   for (auto &l : latches(model)) // alias
     l.next = conj(model, l.next, l.next);
   aiger *original_model = model;
-  model = next_live(model);
+  auto [extended, next_inputs] = next_live(model);
   std::vector<unsigned> og_reset;
-  og_reset.reserve(model->num_latches);
-  for (auto [_, r] : latches(model) | resets)
+  og_reset.reserve(extended->num_latches);
+  for (auto [_, r] : latches(extended) | resets)
     og_reset.push_back(r);
   while (!stack.empty()) {
     auto [violation, depth, original_reset] = stack.back();
@@ -273,26 +273,26 @@ bool rlive(aiger *model, aiger *&witness,
     if (original_reset) {
       L5 << "setting original reset";
       // initial state, reset to original reset
-      assert(og_reset.size() == model->num_latches);
+      assert(og_reset.size() == extended->num_latches);
       unsigned i{};
-      for (auto &l : latches(model))
+      for (auto &l : latches(extended))
         l.reset = og_reset[i++];
     } else {
       L5 << "setting reset violation" << violation;
-      assert(violation.size() == model->num_latches);
+      assert(violation.size() == extended->num_latches);
       unsigned i{};
-      for (auto &l : latches(model))
+      for (auto &l : latches(extended))
         l.reset = violation[i++];
     }
-    to_safety(model);
+    to_safety(extended);
     std::vector<std::vector<unsigned>> safety_cex;
     unsigned shoal_start;
     L5 << "starting search for not q state from reset" << violation;
-    aiger_open_and_write_to_file(model, "rlive_safety.aag"); // TODO remove
-    bool bug = ic3(model, safety_cex, &shoal_start, !original_reset);
+    aiger_open_and_write_to_file(extended, "rlive_safety.aag"); // TODO remove
+    bool bug = ic3(extended, safety_cex, &shoal_start, !original_reset);
     if (bug) { // found not q state
       L3 << "possible liveness violation found";
-      auto [violation, next] = last_states(model, safety_cex);
+      auto [violation, next] = last_states(extended, safety_cex);
       LV5(violation, next);
       if (cex.empty()) {
         cex = safety_cex;
@@ -308,7 +308,7 @@ bool rlive(aiger *model, aiger *&witness,
         // because if it where closed then we would have added a shoal blocking
         // it.
         L2 << "Found dead loop around" << violation;
-        model->num_inputs = num_og_inputs;
+        extended->num_inputs = num_og_inputs;
         for (unsigned &x : cex[0])
           x -= 2 * num_og_inputs;
         for (auto &x : cex | std::views::drop(1))
@@ -322,13 +322,13 @@ bool rlive(aiger *model, aiger *&witness,
       L5 << "no not q state found from reset" << violation;
       L5 << "pop" << violation << "->" << next << "depth" << cex.size();
       stack.pop_back();
-      auto [shoal, shoal_n] = constrain_shoal(model, shoal_start);
+      auto [shoal, shoal_n] = constrain_shoal(extended, shoal_start);
 
       S.push_back(shoal);
       Sn.push_back(shoal_n);
 
       if (!original_reset) {
-        auto [dead, dead_n] = constrain_dead_state(model, violation);
+        auto [dead, dead_n] = constrain_dead_state(extended, violation);
         S.push_back(dead);
         Sn.push_back(dead_n);
       }
@@ -336,16 +336,31 @@ bool rlive(aiger *model, aiger *&witness,
   }
 
   L3 << "liveness proven";
-  model->num_constraints = num_og_constraints;
-  model->num_justice = num_og_justice;
+  // drop shoal constraints
+  for (int i = num_og_constraints; i < extended->num_constraints; ++i)
+    extended->constraints[i].lit = 1;
+  // drop next liveness
+  for (int i = num_og_justice; i < extended->num_justice; ++i)
+    extended->justice[i].lits[0] = 0;
   std::vector<unsigned> S_copy{S};
-  unsigned S_region = S_copy.empty() ? 1 : disj(model, S_copy);
+  unsigned S_region = S_copy.empty() ? 1 : disj(extended, S_copy);
   LV5(S_region);
-  if (model->num_outputs)
-    model->outputs[0].lit = aiger_not(S_region);
+  if (extended->num_outputs)
+    extended->outputs[0].lit = aiger_not(S_region);
   else
-    aiger_add_output(model, aiger_not(S_region), "liveness");
-  add_shoal_comparator(model, S, Sn);
-  witness = model;
+    aiger_add_output(extended, aiger_not(S_region), "liveness");
+  add_shoal_comparator(extended, S, Sn);
+  witness = extended;
+  aiger_reencode(witness);
+  for (auto &l : latches(witness)) {
+    assert(l.name == nullptr);
+    if (aiger_is_constant((l.next))) continue;
+    l.name = strdup(("<" + std::to_string(l.next)).c_str());
+  }
+  unsigned i{};
+  for (auto &l : inputs(witness) | std::views::take(num_og_inputs)) {
+    assert(l.name == nullptr);
+    l.name = strdup(("<" + std::to_string(next_inputs[i++])).c_str());
+  }
   return false;
 }
