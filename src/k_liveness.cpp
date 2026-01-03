@@ -168,7 +168,7 @@ void build_witness(aiger *&witness, aiger *kWit, aiger *model, unsigned k,
   for (unsigned c : stable) {
     aiger_symbol *l = aiger_is_latch(witness, aiger_strip(c));
     assert(l);
-    l->next = conj(witness, l->next, l->next); // alias
+    // l->next = conj(witness, l->next, l->next); // alias
     unsigned n{l->next ^ aiger_sign(c)};
     L5 << "comparator" << c << "<" << n;
     less_stable =
@@ -196,6 +196,8 @@ bool k_liveness(aiger *model, aiger *&witness,
   assert(model);
   assert(model->num_justice == 1);
   assert(model->justice[0].size == 1);
+  for (auto &l : latches(model))
+    l.next = conj(model, l.next, l.next); // alias
 
   const std::vector<unsigned> stable = stabilizers(model);
 
