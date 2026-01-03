@@ -288,7 +288,6 @@ bool rlive(aiger *model, aiger *&witness,
     std::vector<std::vector<unsigned>> safety_cex;
     unsigned shoal_start;
     L5 << "starting search for not q state from reset" << violation;
-    aiger_open_and_write_to_file(extended, "rlive_safety.aag"); // TODO remove
     bool bug = ic3(extended, safety_cex, &shoal_start, !original_reset);
     if (bug) { // found not q state
       L3 << "possible liveness violation found";

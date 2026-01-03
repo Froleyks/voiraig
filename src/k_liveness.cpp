@@ -93,7 +93,6 @@ build_safety_instance(aiger *model, unsigned k,
   unsigned P = k ? disj(safety, lives.back(), Q) : Q;
   L4 << "Reduced to safety property" << P;
   aiger_add_bad(safety, aiger_not(P), "k-buffered");
-  aiger_open_and_write_to_file(safety, "k_liveness.aag");
   return {safety, lives, map[model->justice[0].lits[0]], stabilized};
 }
 
