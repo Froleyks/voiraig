@@ -131,14 +131,13 @@ void reset_next(aiger *model, CaDiCaL::Solver *frame,
 
   for (size_t i = 0; i < model->num_latches; ++i) {
     const aiger_symbol *latch = model->latches + i;
-    if (latch-> lit == latch->reset) continue;
+    if (latch->lit == latch->reset) continue;
     addEquiv(frame, latch->lit, map_lit(latch->next));
   }
 
   // only bad transitions
   frame->add(SAT(map_lit(output(model))));
   frame->add(0);
-
 }
 
 void initialize(aiger *model, CaDiCaL::Solver *frame) {
@@ -361,29 +360,40 @@ Cube predecessor(aiger *model, Frame &f, Cube &b, Frame &f0, bool minA = true) {
 }
 
 void generalize(aiger *model, Frame &f, Frame &f0, std::vector<unsigned> &b) {
+  auto valid = [&](Cube &c) -> bool {
+    // c can additionally be shrunk by predecessor query
+    assert(std::is_sorted(c.begin(), c.end()));
+    if (f0.intersects(c)) return false;
+    bool res = bot == predecessor(model, f, c, f0, false);
+    assert(std::is_sorted(c.begin(), c.end()));
+    return res;
+  };
+
   L3 << "generalizing" << b;
-  std::vector<unsigned> c{b};
-  unsigned d = std::numeric_limits<unsigned>::max();
-  bool covered = true;
-  for (int i = c.size(); i--;) {
-    if (covered) {
-      i = std::min((size_t)i, c.size() - 1);
-      while (c[i] > d)
-        if (!i--) break;
-      if (i < 0) return;
-      d = c[i];
-      c.erase(c.begin() + i);
-    } else {
-      assert(c[i] < d);
-      std::swap(d, c[i]);
+  // assert(valid(b)); // unfortunately has side effects
+  const auto original = b;
+  for (size_t oi = original.size(); oi-- > 0;) {
+    L5 << "generalizing trying to remove" << original[oi];
+    if (b.empty()) return;
+    size_t bi = std::min(oi, b.size() - 1);
+    while (b[bi] > original[oi])
+      bi--;
+    if (b[bi] < original[oi]) {
+      L5 << "generalizing already removed" << original[oi];
+      continue;
     }
-    // TODO another expensive reset intersection
-    if ((covered = (!f0.intersects(c) &&
-                    bot == predecessor(model, f, c, f0, false)))) {
-      L3 << "reduced to" << c;
-      b = c;
+
+    assert(b[bi] == original[oi]);
+    auto cand = b;
+    cand.erase(cand.begin() + bi);
+    if (valid(cand)) {
+      L5 << "generalizing sucessfully removed" << original[oi];
+      L5 << b.size() << "->" << cand.size();
+      b = std::move(cand);
     }
   }
+  // assert(b.empty() || valid(b));
+  return;
 }
 
 int forwardCubes(aiger *model, std::vector<Frame> &frames) {
