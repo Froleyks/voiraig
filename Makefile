@@ -21,5 +21,5 @@ docker: clean
 	docker build -t voiraig .
 	docker run --rm -it voiraig
 clean:
-	rm -rf build bin fuzz debug
+	rm -rf build bin fuzz debug compile_commands.json
 .PHONY: all fuzz clean docker debug
