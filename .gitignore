@@ -2,4 +2,5 @@ build
 fuzz
 debug
 bin
-/.cache/
+.cache
+compile_commands.json
