@@ -3,7 +3,7 @@
 
 void print_banner(void) {
   std::cout << "Voiraig - Certifying Bit Level Model Checker\n";
-  std::cout << "Copyright (c) 2024- Nils Froleyks Johannes Kepler University\n";
+  std::cout << "Copyright (c) 2024- Nils Froleyks KU Leuven\n";
   std::cout << "Version " << VERSION << " Commit " << GITID << "\n";
 }
 

@@ -1,5 +1,4 @@
 MAKEFLAGS += --no-print-directory
-run: debug
 all: build/Makefile
 	@cmake --build build --parallel
 	@cmake --install build --prefix .
