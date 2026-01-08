@@ -191,10 +191,9 @@ InAIG::InAIG(const char *path, options *options) : aig(aiger_init()) {
     }
     LI2(embedded_options) << "Parsed" << embedded_options << "embedded options";
   }
-  L4 << "M" << aig->maxvar << " I" << aig->num_inputs << " L"
-     << aig->num_latches << " O" << aig->num_outputs << " A" << aig->num_ands
-     << " B" << aig->num_bad << " C" << aig->num_constraints << " J"
-     << aig->num_justice << " F" << aig->num_fairness;
+  L4 << "MILOA" << aig->maxvar << aig->num_inputs << aig->num_latches
+     << aig->num_outputs << aig->num_ands << "BCJF" << aig->num_bad
+     << aig->num_constraints << aig->num_justice << aig->num_fairness;
 }
 
 void write_witness(aiger *circuit, const char *path) {
