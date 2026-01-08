@@ -16,6 +16,7 @@
   OPTION(bool,     kind,        0, 0, 0, "use k-Induction") \
   LOGOPT(bool,     location,    1, 0, 1, "use location for logging") \
   OPTION(unsigned, paths,       2, 0, 2, "type of simple path constrains") \
+  OPTION(bool,     stabilize,   1, 0, 1, "enable stabilizer extraction in k-liveness") \
   OPTION(bool,     trace,       1, 0, 1, "produce cex trace") \
   OPTION(bool,     unique,      0, 0, 1, "always use unique kind witness construction") \
   LOGOPT(unsigned, verbosity,   2, 0, 5, "verbosity level")

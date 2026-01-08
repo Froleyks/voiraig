@@ -8,4 +8,4 @@
 // discharge it with IC3. The returned witness is owned by the caller and may
 // alias 'model' when no transformation is needed.
 bool k_liveness(aiger *model, aiger *&witness,
-                std::vector<std::vector<unsigned>> &cex);
+                std::vector<std::vector<unsigned>> &cex, bool stabilize);

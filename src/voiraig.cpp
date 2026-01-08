@@ -22,7 +22,7 @@ int main(int argc, char *argv[]) {
 
   if ((*model)->num_justice) {
     if (options.engine == 0)
-      bug = k_liveness(*model, witness, cex);
+      bug = k_liveness(*model, witness, cex, options.stabilize);
     else if (options.engine == 1)
       bug = lts(*model, witness, cex);
     else if (options.engine == 2)

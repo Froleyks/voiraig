@@ -190,7 +190,7 @@ void build_witness(aiger *&witness, aiger *kWit, aiger *model, unsigned k,
 }
 
 bool k_liveness(aiger *model, aiger *&witness,
-                std::vector<std::vector<unsigned>> &cex) {
+                std::vector<std::vector<unsigned>> &cex, bool stabilize) {
   L1 << "k-liveness";
   assert(model);
   assert(model->num_justice == 1);
@@ -198,7 +198,8 @@ bool k_liveness(aiger *model, aiger *&witness,
   for (auto &l : latches(model))
     l.next = conj(model, l.next, l.next); // alias
 
-  const std::vector<unsigned> stable = stabilizers(model);
+  const std::vector<unsigned> stable =
+      stabilize ? stabilizers(model) : std::vector<unsigned>{};
 
   for (unsigned k = 0;; ++k) {
     L2 << "k-liveness trial k =" << k;
