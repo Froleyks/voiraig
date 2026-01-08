@@ -46,7 +46,8 @@ unsigned next(aiger *aig, unsigned l) {
 unsigned output(const aiger *aig) {
   if (aig->num_bad)
     return aig->bad[0].lit;
-  else if (aig->num_outputs)
+    // assume old aiger
+  else if (!aig->num_justice && aig->num_outputs)
     return aig->outputs[0].lit;
   else
     return aiger_false;
@@ -175,7 +176,7 @@ InAIG::InAIG(const char *path, options *options) : aig(aiger_init()) {
     invalid(4, "multiple justice constraints are not supported");
   if (aig->num_justice && aig->justice[0].size > 1)
     invalid(5, "justice constraints greater than one are not supported");
-  if (aig->num_justice + !!(aig->num_bad + aig->num_outputs) > 1)
+  if (!!aig->num_justice + !!aig->num_bad > 1)
     invalid(6, "combination of safety and liveness not supported");
 
   if (aig->num_bad + aig->num_outputs > 1)
