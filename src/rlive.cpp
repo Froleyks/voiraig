@@ -22,10 +22,10 @@ static void to_safety(aiger *model) {
   assert(model);
   assert(model->num_justice);
   const unsigned J = model->justice[0].lits[0];
-  if (model->num_outputs) {
-    model->outputs[0].lit = J;
+  if (model->num_bad) {
+    model->bad[0].lit = J;
   } else {
-    aiger_add_output(model, J, "bad");
+    aiger_add_bad(model, J, "bad");
   }
 }
 
@@ -344,10 +344,10 @@ bool rlive(aiger *model, aiger *&witness,
   std::vector<unsigned> S_copy{S};
   unsigned S_region = S_copy.empty() ? 1 : disj(extended, S_copy);
   LV5(S_region);
-  if (extended->num_outputs)
-    extended->outputs[0].lit = aiger_not(S_region);
+  if (extended->num_bad)
+    extended->bad[0].lit = aiger_not(S_region);
   else
-    aiger_add_output(extended, aiger_not(S_region), "liveness");
+    aiger_add_bad(extended, aiger_not(S_region), "liveness");
   add_shoal_comparator(extended, S, Sn);
   witness = extended;
   aiger_reencode(witness);
