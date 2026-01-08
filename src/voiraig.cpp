@@ -21,14 +21,14 @@ int main(int argc, char *argv[]) {
   aiger *witness{};
 
   if ((*model)->num_justice) {
-    if (options.engine == 0)
+    if (options.liveness == 0)
       bug = k_liveness(*model, witness, cex, options.stabilize);
-    else if (options.engine == 1)
+    else if (options.liveness == 1)
       bug = lts(*model, witness, cex);
-    else if (options.engine == 2)
+    else if (options.liveness == 2)
       bug = rlive(*model, witness, cex);
     else
-      die("invalid '--engine=%u' (expected 0..2)", options.engine);
+      die("invalid '--liveness=%u' (expected 0..2)", options.liveness);
   } else if (options.kind)
     bug = kind(*model, witness, cex, options.paths, options.unique);
   else

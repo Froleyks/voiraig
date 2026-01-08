@@ -12,8 +12,8 @@
 //                     Name   Def Min Max Description
 #define OPTIONS \
   OPTION(bool,     certificate, 1, 0, 1, "produce witness circuit") \
-  OPTION(unsigned, engine,      2, 0, 2, "liveness engine (0=k,1=lts,2=rlive)") \
   OPTION(bool,     kind,        0, 0, 0, "use k-Induction") \
+  OPTION(unsigned, liveness,    0, 0, 2, "liveness engine (0=k,1=lts,2=rlive)") \
   LOGOPT(bool,     location,    1, 0, 1, "use location for logging") \
   OPTION(unsigned, paths,       2, 0, 2, "type of simple path constrains") \
   OPTION(bool,     stabilize,   1, 0, 1, "enable stabilizer extraction in k-liveness") \
