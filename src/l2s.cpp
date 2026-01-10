@@ -170,13 +170,12 @@ bool lts(aiger *model, aiger *&witness,
         copy_inputs, copy_latches] = safety_reduction(model);
 
   bool bug = ic3(safety, cex);
-  if (bug) {
-    write_witness(safety, cex, "l2s_wit.aag");
+  if (bug)
     cex_construction(model, cex);
-  } else {
+  else
     witness = witness_construction(model, safety, cex, store, stored, J,
                                    model->num_ands, original_inputs,
                                    original_latches, copy_inputs, copy_latches);
-  }
+
   return bug;
 }
