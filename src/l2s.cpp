@@ -108,11 +108,11 @@ aiger *witness_construction(aiger *model, aiger *safety,
   assert(!aiger_sign(store)); // store must be even
   for (auto l : original_inputs)
     m(l, input(witness));
-  m(store, input(witness, "store"));
+  m(store, 0);
   for (auto l : original_latches)
     m(l, latch(witness));
   m(stored, 1);
-  assert(witness->num_inputs == model->num_inputs + 1);
+  assert(witness->num_inputs == model->num_inputs );
   assert(witness->num_latches == model->num_latches);
 
   for (auto [a, x, y] : ands(safety) | std::views::take(og_gates)) {
