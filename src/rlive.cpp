@@ -224,22 +224,21 @@ void add_shoal_comparator(aiger *model, const std::vector<unsigned> &S,
   assert(model);
   assert(model->num_justice >= 1);
   assert(S.size() == Sn.size());
-  unsigned increase = 0;
-  unsigned prefix_equal = 1;
-  L4 << "encoding shoal comparison";
-  for (size_t i = 0; i < S.size(); ++i) {
-    const unsigned s = S[i];
-    const unsigned sn = Sn[i];
-    L5 << s << "<" << sn;
-    const unsigned gt_bit = conj(model, s, aiger_not(sn));
-    L5 << "gt_bit" << gt_bit;
-    const unsigned gt_here = conj(model, prefix_equal, gt_bit);
-    increase = disj(model, increase, gt_here);
-    prefix_equal =
-        conj(model, prefix_equal, conj(model, aiger_not(s), aiger_not(sn)));
+  if (S.empty()) return;
+  std::vector<unsigned> m, mn;
+  m.reserve(S.size());
+  mn.reserve(S.size());
+  m.push_back(S[0]);
+  mn.push_back(Sn[0]);
+  for (size_t i = 1; i < S.size(); ++i) {
+    m.push_back(disj(model, m[i - 1], S[i]));
+    mn.push_back(disj(model, mn[i - 1], Sn[i]));
   }
-  LV4(increase);
-  model->justice[0].lits[0] = increase;
+  unsigned Q{1};
+  for (size_t i = 0; i < S.size(); ++i)
+    Q = conj(model, Q, impl(model, m[i], mn[i]));
+  L5 << "increase" << aiger_not(Q);
+  model->justice[0].lits[0] = aiger_not(Q);
 }
 
 bool rlive(aiger *model, aiger *&witness,

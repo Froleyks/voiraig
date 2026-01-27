@@ -21,7 +21,7 @@ tools/Makefile: CMakeLists.txt
 fuzz/Makefile: CMakeLists.txt
 	cmake -DCMAKE_BUILD_TYPE=Fuzzing -B fuzz -DCHECK=ON
 debug/Makefile: CMakeLists.txt
-	cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCHECK=ON -B debug
+	cmake -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCHECK=ON -DLTO=OFF -B debug
 docker: clean
 	docker build -t voiraig .
 	docker run --rm -it voiraig
