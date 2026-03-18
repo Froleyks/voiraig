@@ -13,7 +13,7 @@ add_custom_target(cadical_build_header
 )
 
 file(GLOB sources CONFIGURE_DEPENDS src/*.cpp src/*.c)
-add_library(cadical STATIC ${sources})
-add_dependencies(cadical cadical_build_header)
-target_include_directories(cadical PUBLIC src)
-set_target_properties(cadical PROPERTIES PUBLIC_HEADER cadical.hpp)
+add_library(cadical_lib STATIC ${sources})
+add_dependencies(cadical_lib cadical_build_header)
+target_include_directories(cadical_lib PUBLIC src)
+set_target_properties(cadical_lib PROPERTIES PUBLIC_HEADER cadical.hpp)

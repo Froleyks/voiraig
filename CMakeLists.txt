@@ -34,4 +34,4 @@ if(STATIC)
 endif()
 
 target_link_libraries(voiraig aiger)
-target_link_libraries(voiraig cadical)
+target_link_libraries(voiraig cadical_lib)
