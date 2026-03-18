@@ -117,8 +117,8 @@ void reset_next(aiger *model, CaDiCaL::Solver *frame,
     gate(frame, map_lit(a->lhs), map_lit(a->rhs0), map_lit(a->rhs1));
   }
 
-  if (model->num_constraints) {
-    frame->add(SAT(map_lit(model->constraints[0].lit)));
+  for (const auto &constraint : constraints(model)) {
+    frame->add(SAT(map_lit(constraint.lit)));
     frame->add(0);
   }
 
@@ -196,16 +196,18 @@ public:
   CaDiCaL::Solver *solver;
   Frame(aiger *model) {
     assert(model);
+    if (model->num_constraints > 1) {
+      C = conj(model, constraints(model) | lits);
+    }
     solver = new CaDiCaL::Solver();
     solver->declare_more_variables(abs(SAT(2 * (model->maxvar + 1))));
     // TODO only on demand
     B = output(model);
-    LV5(B);
-    if (model->num_constraints) {
-      C = model->constraints[0].lit;
+    if (model->num_constraints > 1) {
       solver->add(SAT(C));
       solver->add(0);
     }
+    LV5(B, C);
     initialize(model, solver);
   }
   bool intersects(const Cube &c) {
@@ -279,8 +281,9 @@ Cube predecessor(aiger *model, Frame &f, Cube &b, Frame &f0, bool minA = true) {
   // TODO if cadical only reconstructs the model on val, it might be benefical
   // to split the return of a from the SAT query.
   std::vector<unsigned> bNext;
-  bNext.reserve(b.size() + 1);
-  if (model->num_constraints) { bNext.push_back(model->constraints[0].lit); }
+  bNext.reserve(b.size() + model->num_constraints);
+  for (const auto &constraint : constraints(model))
+    bNext.push_back(constraint.lit);
 
   for (unsigned g : b) {
     const int i = (g - model->latches[0].lit) >> 1;
@@ -301,7 +304,7 @@ Cube predecessor(aiger *model, Frame &f, Cube &b, Frame &f0, bool minA = true) {
     if (constrain) f.solver->constrain(SAT(NOT(g)));
   }
   if (constrain && b.size()) f.solver->constrain(0);
-  assert(bNext.size() <= model->num_latches + 1);
+  assert(bNext.size() <= model->num_latches + model->num_constraints);
   const int res = f.solver->solve();
   if (res == 20) {
     L3 << "no prdecessor for" << b;
@@ -447,11 +450,6 @@ int forwardCubes(aiger *model, std::vector<Frame> &frames) {
 bool ic3(aiger *model, std::vector<std::vector<unsigned>> &cex,
          unsigned *first_added_gate, bool use_reset_next) {
   if (first_added_gate) *first_added_gate = INVALID_LIT;
-  if (model->num_constraints > 1) {
-    unsigned C = conj(model, constraints(model) | lits);
-    model->constraints[0].lit = C;
-    model->num_constraints = 1;
-  }
   std::vector<Frame> frames;
   L2 << "appending frame" << frames.size();
   frames.emplace_back(model);

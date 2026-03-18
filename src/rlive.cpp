@@ -31,8 +31,8 @@ static void to_safety(aiger *model) {
 
 static std::pair<unsigned, unsigned> constrain_shoal(aiger *model,
                                                      unsigned shoal_start) {
-  L5 << "constraining transition with shoal" << aiger_not(output(model));
   assert(model);
+  L5 << "constraining transition with shoal" << aiger_not(output(model));
   const unsigned shoal = aiger_not(output(model));
   const unsigned shoal_end = model->num_ands;
   assert(shoal_start <= shoal_end);
