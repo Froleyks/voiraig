@@ -163,30 +163,29 @@ void build_witness(aiger *&witness, aiger *kWit, aiger *model, unsigned k,
   L5 << "building witness for k =" << k;
   L5 << stable;
   witness = kWit;
-  unsigned equally_stable{1}, less_stable{0};
+  unsigned equally_stable{1}, more_stable{0};
   for (unsigned c : stable) {
     aiger_symbol *l = aiger_is_latch(witness, aiger_strip(c));
     assert(l);
     // l->next = conj(witness, l->next, l->next); // alias
     unsigned n{l->next ^ aiger_sign(c)};
     L5 << "comparator" << c << "<" << n;
-    less_stable =
-        disj(witness, less_stable,
-             conj(witness, equally_stable, conj(witness, c, aiger_not(n))));
+    more_stable =
+        disj(witness, more_stable,
+             conj(witness, equally_stable, conj(witness, aiger_not(c), n)));
     equally_stable = conj(witness, equally_stable, eq(witness, c, n));
   }
-  unsigned more_live{};
+  unsigned less_live{};
   for (unsigned c : lives) {
     assert(!aiger_sign(c));
     aiger_symbol *l = aiger_is_latch(witness, c);
     unsigned n{l->next};
-    more_live = disj(witness, more_live, conj(witness, aiger_not(c), n));
+    less_live = disj(witness, less_live, conj(witness, c, aiger_not(n)));
   }
-  unsigned increase =
-      disj(witness, less_stable, conj(witness, equally_stable, more_live));
-  L1 << "liveness decrease literal" << increase;
-  unsigned violations[] = {increase};
-  aiger_add_justice(witness, 1, violations, nullptr);
+  unsigned rank =
+      disj(witness, more_stable, conj(witness, equally_stable, less_live));
+  L1 << "liveness rank literal" << rank;
+  set_rank(witness, rank);
 }
 
 bool k_liveness(aiger *model, aiger *&witness,

@@ -22,11 +22,7 @@ static void to_safety(aiger *model) {
   assert(model);
   assert(model->num_justice);
   const unsigned J = model->justice[0].lits[0];
-  if (model->num_bad) {
-    model->bad[0].lit = J;
-  } else {
-    aiger_add_bad(model, J, "bad");
-  }
+  set_property(model, J, "bad");
 }
 
 static std::pair<unsigned, unsigned> constrain_shoal(aiger *model,
@@ -219,12 +215,12 @@ last_states(aiger *model, const std::vector<std::vector<unsigned>> &cex) {
   return {not_q, new_reset};
 }
 
-void add_shoal_comparator(aiger *model, const std::vector<unsigned> &S,
+unsigned shoal_comparator(aiger *model, const std::vector<unsigned> &S,
                           const std::vector<unsigned> &Sn) {
   assert(model);
   assert(model->num_justice >= 1);
   assert(S.size() == Sn.size());
-  if (S.empty()) return;
+  if (S.empty()) return 0;
   std::vector<unsigned> m, mn;
   m.reserve(S.size());
   mn.reserve(S.size());
@@ -236,9 +232,9 @@ void add_shoal_comparator(aiger *model, const std::vector<unsigned> &S,
   }
   unsigned Q{1};
   for (size_t i = 0; i < S.size(); ++i)
-    Q = conj(model, Q, impl(model, m[i], mn[i]));
+    Q = conj(model, Q, impl(model, mn[i], m[i]));
   L5 << "increase" << aiger_not(Q);
-  model->justice[0].lits[0] = aiger_not(Q);
+  return aiger_not(Q);
 }
 
 bool rlive(aiger *model, aiger *&witness,
@@ -343,11 +339,8 @@ bool rlive(aiger *model, aiger *&witness,
   std::vector<unsigned> S_copy{S};
   unsigned S_region = S_copy.empty() ? 1 : disj(extended, S_copy);
   LV5(S_region);
-  if (extended->num_bad)
-    extended->bad[0].lit = aiger_not(S_region);
-  else
-    aiger_add_bad(extended, aiger_not(S_region), "liveness");
-  add_shoal_comparator(extended, S, Sn);
+  set_property(extended, aiger_not(S_region), "liveness");
+  set_rank(extended, shoal_comparator(extended, S, Sn));
   witness = extended;
   aiger_reencode(witness);
   for (auto &l : latches(witness)) {

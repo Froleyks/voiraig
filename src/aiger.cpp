@@ -53,6 +53,29 @@ unsigned output(const aiger *aig) {
     return aiger_false;
 }
 
+void set_property(aiger *aig, unsigned lit, const char *name) {
+  if (aig->num_bad) {
+    aig->bad[0].lit = lit;
+    if (name) aig->bad[0].name = strdup(name);
+  } else if (aig->num_outputs) {
+    aig->outputs[0].lit = lit;
+    if (name) aig->outputs[0].name = strdup(name);
+  } else {
+    aiger_add_bad(aig, lit, name);
+  }
+}
+
+void set_rank(aiger *aig, unsigned lit, const char *name) {
+  if (aig->num_justice) {
+    assert(aig->justice[0].size == 1);
+    aig->justice[0].lits[0] = lit;
+    if (name) aig->justice[0].name = strdup(name);
+  } else {
+    unsigned lits[] = {lit};
+    aiger_add_justice(aig, 1, lits, name);
+  }
+}
+
 unsigned size(const aiger *aig) { return (aig->maxvar + 1) * 2; }
 
 unsigned input(aiger *aig, const char *name) {

@@ -112,7 +112,7 @@ aiger *witness_construction(aiger *model, aiger *safety,
   for (auto l : original_latches)
     m(l, latch(witness));
   m(stored, 1);
-  assert(witness->num_inputs == model->num_inputs );
+  assert(witness->num_inputs == model->num_inputs);
   assert(witness->num_latches == model->num_latches);
 
   for (auto [a, x, y] : ands(safety) | std::views::take(og_gates)) {
@@ -141,11 +141,10 @@ aiger *witness_construction(aiger *model, aiger *safety,
 
   assert(original_latches.size() == copy_latches.size());
   for (int i = 0; i < copy_latches.size(); ++i)
-    m(copy_latches[i], map[original_latches[i]]);
+    m(copy_latches[i], nexts[i]);
   assert(original_latches.size() == witness->num_latches);
   for (int i = 0; i < original_latches.size(); ++i)
-    m(original_latches[i], nexts[i], true);
-
+    m(original_latches[i], map[original_latches[i]], true);
   // reencode all ands as the invariant could use original gates
   for (auto [a, x, y] : ands(safety)) {
     L5 << a << "(" << (2 * witness->maxvar + 2) << ") =" << x << "(" << map[x]
@@ -154,11 +153,23 @@ aiger *witness_construction(aiger *model, aiger *safety,
     assert(map[y] != INVALID_LIT);
     m(a, conj(witness, map[x], map[y]), true);
   }
+  set_rank(witness, map[output(safety)], "Plts_Lc/L1");
 
-  unsigned J{map[safety->outputs[0].lit]};
-  aiger_add_bad(witness, J, "Plts_Lc/L_L/L1");
-  unsigned violations[] = {J};
-  aiger_add_justice(witness, 1, violations, "Plts_Lc/L_L/L1");
+  assert(original_latches.size() == copy_latches.size());
+  for (int i = 0; i < copy_latches.size(); ++i)
+    m(copy_latches[i], map[original_latches[i]], true);
+  assert(original_latches.size() == witness->num_latches);
+  for (int i = 0; i < original_latches.size(); ++i)
+    m(original_latches[i], nexts[i], true);
+  // reencode all ands as the invariant could use original gates
+  for (auto [a, x, y] : ands(safety)) {
+    L5 << a << "(" << (2 * witness->maxvar + 2) << ") =" << x << "(" << map[x]
+       << ") & " << y << "(" << map[y] << ")";
+    assert(map[x] != INVALID_LIT);
+    assert(map[y] != INVALID_LIT);
+    m(a, conj(witness, map[x], map[y]), true);
+  }
+  set_property(witness, map[output(safety)], "Plts_Lc/L_L/L1");
 
   return witness;
 }

@@ -834,7 +834,7 @@ static void witness(int kin, aiger *&k_witness_model) {
     aiger_add_constraint(k_witness_model, (model->constraints + i)->lit, "");
   }
 
-  aiger_add_output(k_witness_model, w_output, "");
+  set_property(k_witness_model, w_output, "");
   aiger_reencode(k_witness_model);
 }
 
@@ -893,7 +893,7 @@ void unique_witness(int kin, aiger *&witness) {
   const unsigned p{aiger_not(output(model))};
   for (int j = 0; j < k; ++j)
     properties.push_back(m.at(j).at(p));
-  aiger_add_output(witness, aiger_not(conj(witness, properties)), nullptr);
+  set_property(witness, aiger_not(conj(witness, properties)));
 }
 
 bool kind(aiger *aig, aiger *&k_witness_model,

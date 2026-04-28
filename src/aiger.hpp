@@ -34,6 +34,8 @@ const aiger_symbol *simulates_latch(aiger *model, aiger *witness, unsigned l);
 unsigned reset(aiger *aig, unsigned l);
 unsigned next(aiger *aig, unsigned l);
 unsigned output(const aiger *aig);
+void set_property(aiger *aig, unsigned lit, const char *name = nullptr);
+void set_rank(aiger *aig, unsigned lit, const char *name = nullptr);
 
 unsigned size(const aiger *aig);
 
