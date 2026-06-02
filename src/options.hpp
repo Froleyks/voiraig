@@ -12,6 +12,9 @@
 //                     Name   Def Min Max Description
 #define OPTIONS \
   OPTION(bool,     backward,    0, 0, 1, "use backward algorithm") \
+  OPTION(unsigned, backward_depth, 1, 1, INF, "backward unrolling depth") \
+  OPTION(bool,     backward_flipping,   1, 0, 1, "use CaDiCaL flipping to sparsify backward traces") \
+  OPTION(bool,     backward_simulation, 1, 0, 1, "use ternary simulation to sparsify backward traces") \
   OPTION(bool,     certificate, 1, 0, 1, "produce witness circuit") \
   OPTION(bool,     kind,        0, 0, 0, "use k-Induction") \
   OPTION(unsigned, liveness,    0, 0, 2, "liveness engine (0=k,1=lts,2=rlive)") \

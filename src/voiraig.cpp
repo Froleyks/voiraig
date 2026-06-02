@@ -31,7 +31,8 @@ int main(int argc, char *argv[]) {
     else
       die("invalid '--liveness=%u' (expected 0..2)", options.liveness);
   } else if (options.backward)
-    bug = backward(*model, cex);
+    bug = backward(*model, cex, options.backward_depth,
+                   options.backward_flipping, options.backward_simulation);
   else if (options.kind)
     bug = kind(*model, witness, cex, options.paths, options.unique);
   else
