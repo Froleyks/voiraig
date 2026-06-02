@@ -11,6 +11,7 @@
 // (let ((beg (progn (next-line 3) (point-at-bol))) (end (progn (forward-paragraph) (point)))) (shell-command-on-region beg end "sort -k 2" t t) (align-regexp beg end "\\(,\\s-*\\) " 1 1 t))
 //                     Name   Def Min Max Description
 #define OPTIONS \
+  OPTION(bool,     backward,    0, 0, 1, "use backward algorithm") \
   OPTION(bool,     certificate, 1, 0, 1, "produce witness circuit") \
   OPTION(bool,     kind,        0, 0, 0, "use k-Induction") \
   OPTION(unsigned, liveness,    0, 0, 2, "liveness engine (0=k,1=lts,2=rlive)") \

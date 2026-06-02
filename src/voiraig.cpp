@@ -1,4 +1,5 @@
 #include "aiger.hpp"
+#include "backward.hpp"
 #include "banner.hpp"
 #include "cadical.hpp"
 #include "ic3.hpp"
@@ -29,7 +30,9 @@ int main(int argc, char *argv[]) {
       bug = rlive(*model, witness, cex);
     else
       die("invalid '--liveness=%u' (expected 0..2)", options.liveness);
-  } else if (options.kind)
+  } else if (options.backward)
+    bug = backward(*model, cex);
+  else if (options.kind)
     bug = kind(*model, witness, cex, options.paths, options.unique);
   else
     bug = ic3(*model, cex);
