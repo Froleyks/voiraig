@@ -1,6 +1,7 @@
 #include "backward.hpp"
 
 #include "cadical.hpp"
+#include "kind.hpp"
 #include "ternary.hpp"
 #include "utils.hpp"
 
@@ -22,18 +23,6 @@ ternary ternary_lit(const std::vector<ternary> &s, unsigned lit) {
   if (lit == 0) return X0;
   if (lit == 1) return X1;
   return sign(s[IDX(lit)], lit);
-}
-
-ternary ternary_and(ternary a, ternary b) {
-  if (a == X0 || b == X0) return X0;
-  if (a == X || b == X) return X;
-  return X1;
-}
-
-ternary ternary_or(ternary a, ternary b) {
-  if (a == X1 || b == X1) return X1;
-  if (a == X || b == X) return X;
-  return X0;
 }
 
 ternary ternary_cube(const std::vector<ternary> &s, const Cube &cube) {
@@ -63,6 +52,7 @@ struct SparsificationStats {
 struct LearnedCube {
   Cube cube;
   int last_indicator;
+  std::vector<Cube> suffix;
 };
 
 class BackwardEncoding {
@@ -71,14 +61,23 @@ class BackwardEncoding {
   const unsigned original_bad;
   CaDiCaL::Solver solver;
   int next_var;
+  int declared_vars{};
   std::vector<int> reset_state;
   std::vector<LearnedCube> learned;
   SparsificationStats stats;
   unsigned iterations{};
 
+  void ensure_declared(int highest_var) {
+    if (highest_var <= declared_vars) return;
+    const int target = std::max(highest_var, declared_vars + 128);
+    solver.declare_more_variables(target - declared_vars);
+    declared_vars = target;
+  }
+
   int new_var() {
-    solver.declare_more_variables(1);
-    return next_var++;
+    const int res = next_var++;
+    ensure_declared(res);
+    return res;
   }
 
   int lit(unsigned t, unsigned aig_lit) const {
@@ -166,11 +165,11 @@ class BackwardEncoding {
     });
   }
 
-  void add_last_indicator(const Cube &cube) {
+  void add_last_indicator(const Cube &cube, std::vector<Cube> suffix) {
     const int indicator = new_var();
     for (unsigned l : cube)
       add_clause({-indicator, lit(k, l)});
-    learned.push_back({cube, indicator});
+    learned.push_back({cube, indicator, std::move(suffix)});
   }
 
   ternary bad_value(const std::vector<ternary> &s) const {
@@ -221,11 +220,49 @@ class BackwardEncoding {
     return cube;
   }
 
+  Cube trace_input_cube(const Trace &trace, unsigned t) const {
+    Cube cube;
+    cube.reserve(model->num_inputs);
+    for (unsigned l : inputs(model) | lits) {
+      const ternary v = trace[t][IDX(l)];
+      assert(v);
+      cube.push_back(l | XTS(v));
+    }
+    return cube;
+  }
+
+  const LearnedCube *learned_terminal(const Trace &trace) const {
+    for (const auto &learned_cube : learned)
+      if (ternary_cube(trace[k], learned_cube.cube) == X1)
+        return &learned_cube;
+    return nullptr;
+  }
+
+  std::vector<Cube> trace_suffix(const Trace &trace, unsigned first) const {
+    std::vector<Cube> suffix;
+    if (ternary_lit(trace[k], original_bad) == X1) {
+      suffix.reserve(k - first + 1);
+      for (unsigned t = first; t <= k; ++t)
+        suffix.push_back(trace_input_cube(trace, t));
+      return suffix;
+    }
+
+    const LearnedCube *terminal = learned_terminal(trace);
+    if (!terminal) die("backward trace terminal is not known bad");
+
+    suffix.reserve(k - first + terminal->suffix.size());
+    for (unsigned t = first; t < k; ++t)
+      suffix.push_back(trace_input_cube(trace, t));
+    suffix.insert(suffix.end(), terminal->suffix.begin(),
+                  terminal->suffix.end());
+    return suffix;
+  }
+
 public:
   BackwardEncoding(aiger *model, unsigned k)
       : model(model), k(k), original_bad(output(model)),
         next_var(2 + (k + 1) * model->maxvar) {
-    solver.declare_more_variables(next_var - 1);
+    ensure_declared(next_var - 1);
     add_clause({SAT_TRUE});
 
     reset_state.reserve(k + 1);
@@ -257,10 +294,157 @@ public:
     return solver.solve();
   }
 
+  bool reset_reaches_bad(std::vector<std::vector<unsigned>> &cex) const {
+    assert(cex.empty());
+    for (unsigned depth = 0; depth <= k; ++depth) {
+      CaDiCaL::Solver checker;
+      int next_checker_var = 2 + (depth + 1) * model->maxvar;
+      int declared_checker_vars = 0;
+
+      auto checker_ensure_declared = [&checker, &declared_checker_vars](
+                                         int highest_var) {
+        if (highest_var <= declared_checker_vars) return;
+        const int target = std::max(highest_var, declared_checker_vars + 128);
+        checker.declare_more_variables(target - declared_checker_vars);
+        declared_checker_vars = target;
+      };
+      checker_ensure_declared(next_checker_var - 1);
+
+      auto checker_lit = [this, depth](unsigned t, unsigned aig_lit) -> int {
+        assert(t <= depth);
+        if (aig_lit <= 1) return aig_lit ? SAT_TRUE : SAT_FALSE;
+        const int var = 2 + t * model->maxvar + (IDX(aig_lit) - 1);
+        return SGN(aig_lit) ? -var : var;
+      };
+      auto checker_clause = [&checker](std::initializer_list<int> clause) {
+        for (int l : clause)
+          checker.add(l);
+        checker.add(0);
+      };
+      auto checker_vector_clause = [&checker](const std::vector<int> &clause) {
+        for (int l : clause)
+          checker.add(l);
+        checker.add(0);
+      };
+      auto checker_new_var = [&checker_ensure_declared, &next_checker_var]() {
+        const int res = next_checker_var++;
+        checker_ensure_declared(res);
+        return res;
+      };
+      auto checker_and = [&](int lhs, int rhs) {
+        if (lhs == SAT_FALSE || rhs == SAT_FALSE) return SAT_FALSE;
+        if (lhs == SAT_TRUE) return rhs;
+        if (rhs == SAT_TRUE) return lhs;
+        if (lhs == rhs) return lhs;
+        const int res = checker_new_var();
+        checker_clause({-res, lhs});
+        checker_clause({-res, rhs});
+        checker_clause({res, -lhs, -rhs});
+        return res;
+      };
+      auto checker_equiv = [&](int lhs, int rhs) {
+        if (lhs == rhs) return SAT_TRUE;
+        if (lhs == -rhs) return SAT_FALSE;
+        const int res = checker_new_var();
+        checker_clause({-res, -lhs, rhs});
+        checker_clause({-res, lhs, -rhs});
+        checker_clause({res, lhs, rhs});
+        checker_clause({res, -lhs, -rhs});
+        return res;
+      };
+
+      checker_clause({SAT_TRUE});
+      for (unsigned t = 0; t <= depth; ++t) {
+        for (const auto &gate : ands(model)) {
+          const int lhs = checker_lit(t, gate.lhs);
+          const int rhs0 = checker_lit(t, gate.rhs0);
+          const int rhs1 = checker_lit(t, gate.rhs1);
+          checker_clause({-lhs, rhs0});
+          checker_clause({-lhs, rhs1});
+          checker_clause({lhs, -rhs0, -rhs1});
+        }
+        for (const auto &constraint : constraints(model))
+          checker_clause({checker_lit(t, constraint.lit)});
+      }
+      for (unsigned t = 0; t < depth; ++t)
+        for (const auto &latch : latches(model)) {
+          checker_clause(
+              {-checker_lit(t + 1, latch.lit), checker_lit(t, latch.next)});
+          checker_clause(
+              {checker_lit(t + 1, latch.lit), -checker_lit(t, latch.next)});
+        }
+
+      int reset = SAT_TRUE;
+      for (const auto &latch : latches(model))
+        reset = checker_and(
+            reset, checker_equiv(checker_lit(0, latch.lit),
+                                 checker_lit(0, latch.reset)));
+      checker_clause({reset});
+
+      std::vector<int> bad_clause{checker_lit(depth, original_bad)};
+      bad_clause.reserve(learned.size() + 1);
+      std::vector<std::pair<int, const LearnedCube *>> learned_indicators;
+      learned_indicators.reserve(learned.size());
+      for (const auto &learned_cube : learned) {
+        const int indicator = checker_new_var();
+        for (unsigned l : learned_cube.cube)
+          checker_clause({-indicator, checker_lit(depth, l)});
+        bad_clause.push_back(indicator);
+        learned_indicators.push_back({indicator, &learned_cube});
+      }
+      checker_vector_clause(bad_clause);
+
+      const int res = checker.solve();
+      if (res == 20) continue;
+      if (res != 10) die("backward bounded reset checker returned unknown");
+
+      auto checker_lit_true = [&checker](int l) { return checker.val(l) == l; };
+      cex.emplace_back();
+      cex.back().reserve(model->num_latches);
+      for (unsigned l : latches(model) | lits)
+        cex.back().push_back(
+            l | (checker_lit_true(checker_lit(0, l)) ? 0u : 1u));
+
+      auto push_input_cube = [&](unsigned t) {
+        cex.emplace_back();
+        cex.back().reserve(model->num_inputs);
+        for (unsigned l : inputs(model) | lits)
+          cex.back().push_back(
+              l | (checker_lit_true(checker_lit(t, l)) ? 0u : 1u));
+      };
+
+      if (checker_lit_true(checker_lit(depth, original_bad))) {
+        for (unsigned t = 0; t <= depth; ++t)
+          push_input_cube(t);
+        return true;
+      }
+
+      for (auto [indicator, learned_cube] : learned_indicators)
+        if (checker_lit_true(indicator)) {
+          for (unsigned t = 0; t < depth; ++t)
+            push_input_cube(t);
+          cex.insert(cex.end(), learned_cube->suffix.begin(),
+                     learned_cube->suffix.end());
+          return true;
+        }
+      die("backward bounded reset checker did not select a bad target");
+    }
+    return false;
+  }
+
   bool reset_is_bad(std::vector<std::vector<unsigned>> &cex) const {
     CaDiCaL::Solver checker;
     int next_checker_var = 2 + model->maxvar;
-    checker.declare_more_variables(next_checker_var - 1);
+    int declared_checker_vars = 0;
+
+    auto checker_ensure_declared = [&checker, &declared_checker_vars](
+                                       int highest_var) {
+      if (highest_var <= declared_checker_vars) return;
+      const int target = std::max(highest_var, declared_checker_vars + 128);
+      checker.declare_more_variables(target - declared_checker_vars);
+      declared_checker_vars = target;
+    };
+    checker_ensure_declared(next_checker_var - 1);
 
     auto checker_lit = [this](unsigned aig_lit) -> int {
       if (aig_lit <= 1) return aig_lit ? SAT_TRUE : SAT_FALSE;
@@ -277,9 +461,10 @@ public:
         checker.add(l);
       checker.add(0);
     };
-    auto checker_new_var = [&checker, &next_checker_var]() {
-      checker.declare_more_variables(1);
-      return next_checker_var++;
+    auto checker_new_var = [&checker_ensure_declared, &next_checker_var]() {
+      const int res = next_checker_var++;
+      checker_ensure_declared(res);
+      return res;
     };
     auto checker_and = [&](int lhs, int rhs) {
       if (lhs == SAT_FALSE || rhs == SAT_FALSE) return SAT_FALSE;
@@ -324,11 +509,14 @@ public:
 
     std::vector<int> bad_clause{checker_lit(original_bad)};
     bad_clause.reserve(learned.size() + 1);
+    std::vector<std::pair<int, const LearnedCube *>> learned_indicators;
+    learned_indicators.reserve(learned.size());
     for (const auto &learned_cube : learned) {
       const int indicator = checker_new_var();
       for (unsigned l : learned_cube.cube)
         checker_clause({-indicator, checker_lit(l)});
       bad_clause.push_back(indicator);
+      learned_indicators.push_back({indicator, &learned_cube});
     }
     checker_vector_clause(bad_clause);
 
@@ -342,6 +530,15 @@ public:
     cex.back().reserve(model->num_latches);
     for (unsigned l : latches(model) | lits)
       cex.back().push_back(l | (checker_lit_true(checker_lit(l)) ? 0u : 1u));
+    if (!checker_lit_true(checker_lit(original_bad))) {
+      for (auto [indicator, learned_cube] : learned_indicators)
+        if (checker_lit_true(indicator)) {
+          cex.insert(cex.end(), learned_cube->suffix.begin(),
+                     learned_cube->suffix.end());
+          return true;
+        }
+      die("backward reset checker did not select a bad target");
+    }
     cex.emplace_back();
     cex.back().reserve(model->num_inputs);
     for (unsigned l : inputs(model) | lits)
@@ -350,7 +547,7 @@ public:
   }
 
   std::optional<unsigned> reset_position() {
-    for (unsigned t = 0; t <= k; ++t)
+    for (unsigned t = k + 1; t-- > 0;)
       if (solver_lit_true(reset_state[t])) return t;
     return {};
   }
@@ -373,8 +570,20 @@ public:
     assert(cex.empty());
     cex.reserve(k - reset_at + 2);
     cex.push_back(solver_state_cube(reset_at));
-    for (unsigned t = reset_at; t <= k; ++t)
-      cex.push_back(solver_input_cube(t));
+    if (solver_lit_true(lit(k, original_bad))) {
+      for (unsigned t = reset_at; t <= k; ++t)
+        cex.push_back(solver_input_cube(t));
+      return;
+    }
+    for (const auto &learned_cube : learned)
+      if (solver_lit_true(learned_cube.last_indicator)) {
+        for (unsigned t = reset_at; t < k; ++t)
+          cex.push_back(solver_input_cube(t));
+        cex.insert(cex.end(), learned_cube.suffix.begin(),
+                   learned_cube.suffix.end());
+        return;
+      }
+    die("backward solver did not select a bad target");
   }
 
   void sparsify_by_flipping(Trace &trace) {
@@ -416,7 +625,7 @@ public:
         Trace candidate = trace;
         candidate[t][IDX(l)] = X;
         simulate_suffix(candidate, t);
-        if (bad_value(candidate[k]) == X0) {
+        if (bad_value(candidate[k]) != X1) {
           stats.simulation_reverts++;
           continue;
         }
@@ -435,12 +644,14 @@ public:
 
       for (unsigned d = 0; d < k; ++d)
         forbid_cube(d, cube);
-      add_last_indicator(cube);
+      add_last_indicator(cube, trace_suffix(trace, t));
       added++;
       L3 << "backward learned cube at trace state" << t << cube;
     }
     return added;
   }
+
+  bool has_learned_cubes() const { return !learned.empty(); }
 
   void install_strengthened_property() {
     std::vector<unsigned> bads;
@@ -471,11 +682,18 @@ public:
 } // namespace
 
 bool backward(aiger *model, std::vector<std::vector<unsigned>> &cex,
-              unsigned k, bool use_flipping, bool use_simulation) {
+              aiger *&witness, unsigned k, bool use_flipping,
+              bool use_simulation) {
   L1 << "backward with depth" << k;
 
   BackwardEncoding backward(model, k);
   for (;;) {
+    if (backward.reset_reaches_bad(cex)) {
+      L1 << "backward found reset-to-bad trace within depth" << k;
+      backward.print_stats();
+      return true;
+    }
+
     if (backward.reset_is_bad(cex)) {
       L1 << "backward found reset state in bad set";
       backward.print_stats();
@@ -485,7 +703,10 @@ bool backward(aiger *model, std::vector<std::vector<unsigned>> &cex,
     const int res = backward.solve();
     if (res == 20) {
       L1 << "backward proved safety";
-      backward.install_strengthened_property();
+      if (backward.has_learned_cubes())
+        backward.install_strengthened_property();
+      else
+        witness = build_k_induction_witness(model, k);
       backward.print_stats();
       return false;
     }

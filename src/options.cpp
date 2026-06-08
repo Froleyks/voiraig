@@ -153,7 +153,8 @@ void parse_options(int argc, char **argv, struct options *opts) {
     }
 #define OPTION(TYPE, NAME, DEFAULT, MIN, MAX, DESCRIPTION)                     \
   else if (opt[0] == '-' && opt[1] == '-' && opt[2] == 'n' && opt[3] == 'o' && \
-           opt[4] == '-' && parse_option(opt + 5, #NAME)) opts->NAME = false;
+           opt[4] == '-' && !strcmp(#TYPE, "bool") &&                         \
+           parse_option(opt + 5, #NAME)) opts->NAME = false;
     OPTIONS
 #undef OPTION
 #define OPTION(TYPE, NAME, DEFAULT, MIN, MAX, DESCRIPTION)             \
@@ -186,7 +187,6 @@ static const char *bool_to_string(bool value) {
   return value ? "true" : "false";
 }
 
-// TODO report non default options
 [[maybe_unused]] static void
 report_non_default_bool_option(const char *name, bool actual_value,
                                bool default_value) {

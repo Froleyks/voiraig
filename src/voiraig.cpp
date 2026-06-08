@@ -17,6 +17,7 @@ int main(int argc, char *argv[]) {
   print_banner();
   Logging::init(&options);
   InAIG model(options.model, &options);
+  report_non_default_options(&options);
   std::vector<std::vector<unsigned>> cex;
   bool bug;
   aiger *witness{};
@@ -30,13 +31,15 @@ int main(int argc, char *argv[]) {
       bug = rlive(*model, witness, cex);
     else
       die("invalid '--liveness=%u' (expected 0..2)", options.liveness);
-  } else if (options.backward)
-    bug = backward(*model, cex, options.backward_depth,
-                   options.backward_flipping, options.backward_simulation);
-  else if (options.kind)
-    bug = kind(*model, witness, cex, options.paths, options.unique);
-  else
+  } else if (options.safety == 0)
     bug = ic3(*model, cex);
+  else if (options.safety == 1)
+    bug = kind(*model, witness, cex, options.paths, options.unique);
+  else if (options.safety == 2)
+    bug = backward(*model, cex, witness, options.backward_depth,
+                   options.backward_flipping, options.backward_simulation);
+  else
+    die("invalid '--safety=%u' (expected 0..2)", options.safety);
 
   if (bug) {
     if (options.trace) write_witness(*model, cex, options.witness_sat);

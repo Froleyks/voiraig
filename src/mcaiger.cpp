@@ -3,6 +3,7 @@
 #include "cadical.hpp"
 #include "utils.hpp"
 
+#include <algorithm>
 #include <assert.h>
 #include <ctype.h>
 #include <limits.h>
@@ -21,6 +22,7 @@ static int acs, mix;
 static int ncs, dcs, rcs;
 static unsigned *frames, sframes, nframes;
 static unsigned nrcs;
+static int declared_vars;
 
 #define picosat_ado_conflicts(...) (0u)
 #define picosat_disable_ado(...) \
@@ -50,6 +52,16 @@ static int lit(unsigned k, unsigned l) {
   res = (l <= 1) ? 1 : frame(k) + (int)((l - 2) / 2);
   if (l & 1) res = -res;
   return res;
+}
+
+static void ensure_declared(int highest_var) {
+  if (highest_var <= declared_vars) return;
+  s->declare_more_variables(highest_var - declared_vars);
+  declared_vars = highest_var;
+}
+
+static void ensure_frame_declared(unsigned k) {
+  ensure_declared(std::max(1, frame(k + 1) - 1));
 }
 
 static int input(unsigned k, unsigned i) {
@@ -347,6 +359,7 @@ std::pair<bool, int> mcaiger(aiger *aig, unsigned simple_path) {
   double delta;
   bool bug{};
   s = new CaDiCaL::Solver();
+  declared_vars = 0;
   if (simple_path == 0)
     ncs = 1;
   else if (simple_path == 1)
@@ -357,6 +370,7 @@ std::pair<bool, int> mcaiger(aiger *aig, unsigned simple_path) {
     assert(false);
   model = aig;
   for (k = 0; k <= maxk; k++) {
+    ensure_frame_declared(k);
     if (mix && acs && picosat_ado_conflicts(ps) >= 10000) {
       acs = 0;
       rcs = 1;

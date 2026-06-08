@@ -724,6 +724,31 @@ static void witness(int kin, aiger *&k_witness_model) {
   }
 
   /* p1: b^i -> h^i, for i in 1..k-1 */
+  auto add_literal_equivalence = [&](unsigned lhs, unsigned rhs) {
+    const unsigned lhs_and_not_rhs = current_index;
+    aiger_add_and(k_witness_model, lhs_and_not_rhs, lhs, neg(rhs));
+    current_index += 2;
+    const unsigned not_lhs_and_rhs = current_index;
+    aiger_add_and(k_witness_model, not_lhs_and_rhs, neg(lhs), rhs);
+    current_index += 2;
+    const unsigned equivalence = current_index;
+    aiger_add_and(k_witness_model, equivalence, neg(lhs_and_not_rhs),
+                  neg(not_lhs_and_rhs));
+    current_index += 2;
+    return equivalence;
+  };
+
+  auto conjoin_literals = [&](const std::vector<unsigned> &literals) {
+    ass(!literals.empty());
+    unsigned res = literals.at(0);
+    for (unsigned i = 1; i < literals.size(); i++) {
+      aiger_add_and(k_witness_model, current_index, res, literals.at(i));
+      res = current_index;
+      current_index += 2;
+    }
+    return res;
+  };
+
   std::vector<unsigned> p1s;
   for (unsigned i = 0; i < k - 1; i++) {
     unsigned complement = (k - 1) - i;
@@ -738,45 +763,17 @@ static void witness(int kin, aiger *&k_witness_model) {
       unsigned original_next = original_latch->next;
       unsigned new_next_i =
           mapping_old_index_to_k_witness_circuit(original_next, i);
-      /* l<->new_next_i */
-      /* l^!new_next_i */
-      aiger_add_and(k_witness_model, current_index, l, neg(new_next_i));
-      current_index += 2;
-      /* !l ^ new_next_i */
-      aiger_add_and(k_witness_model, current_index, new_next_i, l + 1);
-      current_index += 2;
-      aiger_add_and(k_witness_model, current_index, current_index - 3,
-                    current_index - 1);
-      h_ls.push_back(current_index);
-      current_index += 2;
+      h_ls.push_back(add_literal_equivalence(l, new_next_i));
     }
-    prev = h_ls.at(0);
-    // TODO this can't be right
-    for (unsigned i = 1; i < num_latches; i++) {
-      unsigned index = h_ls.at(i);
-      aiger_add_and(k_witness_model, current_index, prev, index);
-      prev = current_index;
-      current_index += 2;
-    }
+    unsigned h_i = conjoin_literals(h_ls);
     /* b^i ^ !h^i*/
-    aiger_add_and(k_witness_model, current_index, b_i, current_index - 1);
-    p1s.push_back(current_index + 1);
+    aiger_add_and(k_witness_model, current_index, b_i, neg(h_i));
+    p1s.push_back(neg(current_index));
     current_index += 2;
   }
 
   /* p1 */
-  prev = p1s.at(0);
-  if (p1s.size() == 1) {
-    ps.push_back(prev);
-  } else {
-    for (unsigned i = 1; i < k - 1; i++) {
-      unsigned index = p1s.at(i);
-      aiger_add_and(k_witness_model, current_index, prev, index);
-      prev = current_index;
-      current_index += 2;
-    }
-    ps.push_back(current_index - 2);
-  }
+  ps.push_back(conjoin_literals(p1s));
 
   L4 << "p1 set";
   /* p2: b^i -> p^i */
@@ -894,6 +891,13 @@ void unique_witness(int kin, aiger *&witness) {
   for (int j = 0; j < k; ++j)
     properties.push_back(m.at(j).at(p));
   set_property(witness, aiger_not(conj(witness, properties)));
+}
+
+aiger *build_k_induction_witness(aiger *aig, unsigned depth) {
+  model = aig;
+  aiger *res{};
+  unique_witness(depth, res);
+  return res;
 }
 
 bool kind(aiger *aig, aiger *&k_witness_model,

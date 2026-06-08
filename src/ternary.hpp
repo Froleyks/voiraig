@@ -36,6 +36,22 @@ inline ternary sign(ternary t, unsigned l) {
   return NEG[t | (l & 1u)];
 }
 inline bool flipped(ternary c, ternary u) { return (c ^ u) && u; }
+inline ternary ternary_and(ternary lhs, ternary rhs) {
+  static constexpr ternary AND[] = {
+      X,  X,  X,  X,  X,  X0, X0, X,  //  X
+      X,  X,  X,  X,  X,  X0, X0, X,  // -X
+      X,  X,  X,  X,  X,  X0, X0, X,  //  X
+      X,  X,  X,  X,  X,  X0, X0, X,  // -X
+      X,  X,  X,  X,  X1, X0, X0, X1, //  1
+      X0, X0, X0, X0, X0, X0, X0, X0, // -1
+      X0, X0, X0, X0, X0, X0, X0, X0, //  0
+      X,  X,  X,  X,  X1, X0, X0, X1, // -0
+  };
+  return AND[rhs + 8 * lhs];
+}
+inline ternary ternary_or(ternary lhs, ternary rhs) {
+  return sign(ternary_and(sign(lhs, 1), sign(rhs, 1)), 1);
+}
 
 // this is supposed to be independent of the encoding
 bool validSimulation(aiger_and ands[], const unsigned num_ands,

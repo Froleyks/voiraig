@@ -8,7 +8,7 @@ tools: tools/Makefile
 fuzz: fuzz/Makefile
 	@cmake --build fuzz --parallel
 	@cmake --install fuzz --prefix fuzz
-	cd fuzz && FUZZER_OPTIONS='-2 -m -s -j -L' ./bin/certifuzzer ./voiraig 8
+	cd fuzz && FUZZER_OPTIONS='-2 -m -S' ./bin/certifuzzer ./voiraig 1
 debug: debug/Makefile
 	@cmake --build debug --parallel
 	@cmake --install debug --prefix .

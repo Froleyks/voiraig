@@ -71,16 +71,22 @@ std::vector<unsigned> reduce(aiger *model,
                              std::vector<ternary> &s) {
   const unsigned lBegin = model->num_inputs + 1; // const 1
   const unsigned lEnd = lBegin + model->num_latches;
+  std::vector<bool> obligation_variables(model->maxvar + 1);
+  for (unsigned l : obligations)
+    obligation_variables[IDX(l)] = true;
+
   for (unsigned i = lBegin; i < lEnd; ++i) {
-    // TODO skip those that are in obligations?
+    if (obligation_variables[i]) continue;
     const ternary v = s[i];
     assert(v);
     s[i] = X;
     L3 << "try to eliminate latch" << (i << 1);
     propagate(model->ands, model->num_ands, s);
     const bool covered =
-        std::none_of(obligations.begin(), obligations.end(),
-                     [&s](const unsigned l) { return !(s[IDX(l)]); });
+        std::all_of(obligations.begin(), obligations.end(),
+                    [&s](const unsigned l) {
+                      return sign(s[IDX(l)], l) == X1;
+                    });
     LI3(covered) << "eliminated" << (i << 1);
     if (!covered) s[i] = v;
   }
