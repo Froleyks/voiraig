@@ -11,7 +11,7 @@
 // (let ((beg (progn (next-line 3) (point-at-bol))) (end (progn (forward-paragraph) (point)))) (shell-command-on-region beg end "sort -k 2" t t) (align-regexp beg end "\\(,\\s-*\\) " 1 1 t))
 //                     Name   Def Min Max Description
 #define OPTIONS \
-  OPTION(unsigned, backward_depth, 1, 1, 10, "backward unrolling depth") \
+  OPTION(unsigned, backward_depth, 10, 1, 10, "backward unrolling depth") \
   OPTION(bool,     backward_flipping,   1, 0, 1, "use CaDiCaL flipping to sparsify backward traces") \
   OPTION(bool,     backward_simulation, 1, 0, 1, "use ternary simulation to sparsify backward traces") \
   OPTION(bool,     certificate, 1, 0, 1, "produce witness circuit") \
