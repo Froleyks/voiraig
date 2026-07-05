@@ -196,14 +196,14 @@ public:
   CaDiCaL::Solver *solver;
   Frame(aiger *model) {
     assert(model);
-    if (model->num_constraints > 1) {
+    if (model->num_constraints) {
       C = conj(model, constraints(model) | lits);
     }
     solver = new CaDiCaL::Solver();
     solver->declare_more_variables(abs(SAT(2 * (model->maxvar + 1))));
     // TODO only on demand
     B = output(model);
-    if (model->num_constraints > 1) {
+    if (model->num_constraints) {
       solver->add(SAT(C));
       solver->add(0);
     }

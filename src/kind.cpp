@@ -124,6 +124,12 @@ unsigned map_to_next(unsigned l) {
 }
 
 static void witness(int kin, aiger *&k_witness_model) {
+  k = kin;
+  if (k < 2) {
+    k_witness_model = model;
+    return;
+  }
+
   bool not_supported = model->num_constraints;
   for (auto [l, r] : latches(model) | resets) {
     if (not_supported) break;
@@ -134,11 +140,6 @@ static void witness(int kin, aiger *&k_witness_model) {
     std::cerr << "Voiraig: Constraints and reset functions not supported with "
                  "kInd without simple path";
     exit(1);
-  }
-  k = kin;
-  if (k < 2) {
-    k_witness_model = model;
-    return;
   }
 
   num_inputs = model->num_inputs;

@@ -179,7 +179,6 @@ void parse_options(int argc, char **argv, struct options *opts) {
     }
   }
   if (!opts->model) die(compact_usage.c_str());
-  if (!opts->witness_sat) opts->witness_sat = "";
   if (!opts->witness_uns) opts->witness_uns = opts->witness_sat;
 }
 
