@@ -832,7 +832,7 @@ static void witness(int kin, aiger *&k_witness_model) {
     aiger_add_constraint(k_witness_model, (model->constraints + i)->lit, "");
   }
 
-  set_property(k_witness_model, w_output, "");
+  set_property(k_witness_model, w_output);
   aiger_reencode(k_witness_model);
 }
 

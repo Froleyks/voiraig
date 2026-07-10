@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(voiraig VERSION 1.0.1)
+project(voiraig VERSION 1.0.2)
 set(CMAKE_CXX_STANDARD 23)
 file(GLOB headers CONFIGURE_DEPENDS src/*.hpp)
 file(GLOB sources CONFIGURE_DEPENDS src/*.cpp)

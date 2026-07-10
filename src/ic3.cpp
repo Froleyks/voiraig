@@ -475,7 +475,7 @@ bool ic3(aiger *model, std::vector<std::vector<unsigned>> &cex,
         for (unsigned i = converged; i < frames.size(); ++i)
           for (auto &c : frames[i].cubes)
             bs.push_back(conj(model, c));
-        set_property(model, disj(model, bs), "");
+        set_property(model, disj(model, bs));
         // TODO move this to uniqueptr
         for (auto &f : frames)
           delete f.solver;
