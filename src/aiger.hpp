@@ -105,4 +105,4 @@ struct OutAIG {
 void write_witness(aiger *circuit, const char *path);
 
 void write_witness(aiger *model, const std::vector<std::vector<unsigned>> &cex,
-                   const char *path);
+                   const char *path, char property = 0, unsigned index = 0);

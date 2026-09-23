@@ -23,6 +23,7 @@ static int ncs, dcs, rcs;
 static unsigned *frames, sframes, nframes;
 static unsigned nrcs;
 static int declared_vars;
+static std::vector<unsigned> initial;
 
 #define picosat_ado_conflicts(...) (0u)
 #define picosat_disable_ado(...) \
@@ -238,15 +239,10 @@ static void bad(unsigned k) {
 }
 
 static void init(unsigned k) {
-  unsigned i;
-  int l, r;
-
   if (bonly && k) return;
 
-  for (i = 0; i < model->num_latches; i++) {
-    r = reset(i);
-    if (r > 1) continue; // uninitialized
-    l = latch(0, i) * (r ? 1 : -1);
+  for (unsigned reset_condition : initial) {
+    const int l = lit(0, reset_condition);
     if (bonly)
       unary(l);
     else
@@ -272,7 +268,7 @@ static int cmp_frames(const void *p, const void *q) {
   return 0;
 }
 
-static int sat(unsigned k) {
+static int sat(unsigned k, bool initialized = false) {
   unsigned i;
   int res;
 
@@ -318,6 +314,9 @@ RESTART:
       if (!cmp_frames(frames + i, frames + i + 1)) {
         diffs(frames[i], frames[i + 1]);
         nrcs++;
+        // Solving consumes assumptions. A refined base query must retain its
+        // reset conditions as well as the bad-state assumption.
+        if (initialized) init(k);
         bad(k);
         goto RESTART;
       }
@@ -345,7 +344,7 @@ static int base(unsigned k) {
   init(k);
   bad(k);
   L2 << k << "base";
-  res = (sat(k) == 10);
+  res = (sat(k, true) == 10);
   if (acs) picosat_enable_ado(ps);
   return res;
 }
@@ -369,6 +368,16 @@ std::pair<bool, int> mcaiger(aiger *aig, unsigned simple_path) {
   else
     assert(false);
   model = aig;
+  initial.clear();
+  for (const auto &l : latches(model)) {
+    if (l.reset == l.lit) continue;
+    if (l.reset < 2)
+      initial.push_back(l.lit ^ !l.reset);
+    else
+      // Encode the relation before assigning SAT variables to frames.  Only
+      // base queries assume it; induction must still range over all states.
+      initial.push_back(::eq(model, l.lit, l.reset));
+  }
   for (k = 0; k <= maxk; k++) {
     ensure_frame_declared(k);
     if (mix && acs && picosat_ado_conflicts(ps) >= 10000) {

@@ -1,4 +1,6 @@
 MAKEFLAGS += --no-print-directory
+FUZZ_COUNT ?= 10000
+FUZZ_JOBS ?= 8
 all: build/Makefile
 	@cmake --build build --parallel
 	@cmake --install build --prefix .
@@ -8,7 +10,11 @@ tools: tools/Makefile
 fuzz: fuzz/Makefile
 	@cmake --build fuzz --parallel
 	@cmake --install fuzz --prefix fuzz
-	cd fuzz && FUZZER_OPTIONS='-2 -m -j' ./bin/certifuzzer ./voiraig 8
+	cd fuzz && FUZZER_OPTIONS='-2 -f' ./bin/certifuzzer ./voiraig 8
+fuzz-check: fuzz/Makefile
+	@cmake --build fuzz --parallel
+	@cmake --install fuzz --prefix fuzz
+	python3 scripts/fuzz.py --count $(FUZZ_COUNT) --jobs $(FUZZ_JOBS)
 debug: debug/Makefile
 	@cmake --build debug --parallel
 	@cmake --install debug --prefix .
@@ -27,4 +33,4 @@ docker: clean
 	docker run --rm -it voiraig
 clean:
 	rm -rf build bin tools fuzz debug compile_commands.json
-.PHONY: all fuzz clean docker debug
+.PHONY: all fuzz fuzz-check clean docker debug

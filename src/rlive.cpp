@@ -12,6 +12,7 @@
 
 #include "aiger.h"
 #include "ic3.hpp"
+#include "general.hpp"
 #include "ternary.hpp"
 #include "utils.hpp"
 
@@ -76,7 +77,7 @@ static std::pair<unsigned, unsigned> constrain_shoal(aiger *model,
 // theory it is possible to find a witness without this need, and I may have a
 // practical construction but imposing the arbitrary restriction to the witness
 // seems unwise.
-std::pair<aiger *, std::vector<unsigned>> next_live(aiger *model) {
+std::tuple<aiger *, std::vector<unsigned>, unsigned> next_live(aiger *model) {
   assert(model);
   assert(model->num_justice == 1);
   aiger *extended = aiger_init();
@@ -146,14 +147,14 @@ std::pair<aiger *, std::vector<unsigned>> next_live(aiger *model) {
   }
 
   assert(map[J] != INVALID_LIT);
-  violations[0] = map[J];
-  aiger_add_justice(extended, 1, violations, "Jn");
-
-  return {extended, next_inputs};
+  // The next-state signal is an internal aid for comparing shoals, not a
+  // second property. Certificates must retain the model's justice shape.
+  return {extended, next_inputs, map[J]};
 }
 
 static std::pair<unsigned, unsigned>
-constrain_dead_state(aiger *model, const std::vector<bool> &not_q) {
+constrain_dead_state(aiger *model, const std::vector<bool> &not_q,
+                     unsigned next_justice) {
   L5 << "constraining dead state" << not_q;
   assert(model);
   assert(not_q.size() == model->num_latches);
@@ -170,7 +171,7 @@ constrain_dead_state(aiger *model, const std::vector<bool> &not_q) {
   const unsigned dead =
       conj(model, model->justice[0].lits[0], conj(model, dead_lits));
   const unsigned dead_n =
-      conj(model, model->justice[1].lits[0], conj(model, dead_n_lits));
+      conj(model, next_justice, conj(model, dead_n_lits));
   aiger_add_constraint(model, aiger_not(dead), nullptr);
   L5 << "constrained dead state" << dead << dead_n;
   return {dead, dead_n};
@@ -240,6 +241,16 @@ unsigned shoal_comparator(aiger *model, const std::vector<unsigned> &S,
 bool rlive(aiger *model, aiger *&witness,
            std::vector<std::vector<unsigned>> &cex) {
   L1 << "Running rlive liveness checker";
+  // Shoal search replaces the input at a trace splice. With functional
+  // resets this can invalidate the initial state, while restricting only
+  // that splice would make its subsequent global pruning unsound. Use the
+  // acceptance monitor, which preserves every original reset and transition.
+  if (std::any_of(latches(model).begin(), latches(model).end(),
+                  [](const auto &l) { return l.reset > 1 && l.reset != l.lit; })) {
+    unsigned property_index = 0;
+    bool is_justice = true;
+    return general_liveness(model, witness, cex, property_index, is_justice);
+  }
   struct search_state {
     std::vector<bool> not_q;
     size_t cex_size;
@@ -252,12 +263,11 @@ bool rlive(aiger *model, aiger *&witness,
   std::vector<unsigned> S, Sn;
   std::unordered_set<std::vector<bool>> visited;
   unsigned num_og_inputs{model->num_inputs},
-      num_og_constraints{model->num_constraints},
-      num_og_justice{model->num_justice};
+      num_og_constraints{model->num_constraints};
   for (auto &l : latches(model)) // alias
     l.next = conj(model, l.next, l.next);
   aiger *original_model = model;
-  auto [extended, next_inputs] = next_live(model);
+  auto [extended, next_inputs, next_justice] = next_live(model);
   std::vector<unsigned> og_reset;
   og_reset.reserve(extended->num_latches);
   for (auto [_, r] : latches(extended) | resets)
@@ -322,7 +332,8 @@ bool rlive(aiger *model, aiger *&witness,
       Sn.push_back(shoal_n);
 
       if (!original_reset) {
-        auto [dead, dead_n] = constrain_dead_state(extended, violation);
+        auto [dead, dead_n] =
+            constrain_dead_state(extended, violation, next_justice);
         S.push_back(dead);
         Sn.push_back(dead_n);
       }
@@ -333,9 +344,6 @@ bool rlive(aiger *model, aiger *&witness,
   // drop shoal constraints
   for (int i = num_og_constraints; i < extended->num_constraints; ++i)
     extended->constraints[i].lit = 1;
-  // drop next liveness
-  for (int i = num_og_justice; i < extended->num_justice; ++i)
-    extended->justice[i].lits[0] = 0;
   std::vector<unsigned> S_copy{S};
   unsigned S_region = S_copy.empty() ? 1 : disj(extended, S_copy);
   LV5(S_region);

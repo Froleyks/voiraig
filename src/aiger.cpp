@@ -193,18 +193,6 @@ InAIG::InAIG(const char *path, options *options) : aig(aiger_init()) {
   if (err) invalid(1, "parse error reading");
   if (!inputs_latches_reencoded(aig))
     invalid(2, "inputs and latches have to be reencoded even in ASCII format");
-  if (aig->num_fairness)
-    invalid(3, "global fairness constraints are not supported");
-  if (aig->num_justice > 1)
-    invalid(4, "multiple justice constraints are not supported");
-  if (aig->num_justice && aig->justice[0].size > 1)
-    invalid(5, "justice constraints greater than one are not supported");
-  if (!!aig->num_justice + !!aig->num_bad > 1)
-    invalid(6, "combination of safety and liveness not supported");
-
-  if (aig->num_bad + aig->num_outputs > 1)
-    std::cout << "Voiraig: WARNING Multiple properties. Using "
-              << (aig->num_bad ? "bad" : "output") << "0: " << path << "\n";
   unsigned embedded_options{};
   if (options) {
     char **p, *str;
@@ -232,18 +220,13 @@ void write_witness(aiger *circuit, const char *path) {
 
 void expand(std::ostream &o, const std::vector<unsigned> &c,
             aiger_symbol *first_symbol, unsigned n) {
-  if (!first_symbol) return;
-  L3 << "expand" << c << "from" << first_symbol->lit << "to length" << n;
-  unsigned i = (first_symbol->lit / 2) + 1;
-  for (auto l : c) {
-    const unsigned v = l / 2;
-    for (; i < v; i++)
-      o << 'x';
-    o << (~l & 1u);
-    i += 1;
-  }
-  for (; i < n; i++)
-    o << 'x';
+  std::string values(n, 'x');
+  if (n)
+    for (unsigned lit : c) {
+      unsigned index = ((lit & ~1u) - first_symbol->lit) / 2;
+      if (index < n) values[index] = '0' + (~lit & 1u);
+    }
+  o << values;
 }
 
 // The cex format:
@@ -251,7 +234,7 @@ void expand(std::ostream &o, const std::vector<unsigned> &c,
 // which is necessary for the trace. May be bigger.
 // rest: Cube of inputs from initial to bad necessary for the trace.
 void write_witness(aiger *model, const std::vector<std::vector<unsigned>> &cex,
-                   const char *path) {
+                   const char *path, char property, unsigned index) {
   L1 << "writing counter example";
   std::ofstream f;
   if (path) {
@@ -259,11 +242,9 @@ void write_witness(aiger *model, const std::vector<std::vector<unsigned>> &cex,
     if (!f.is_open()) die("cannot write %s", path);
   }
   std::ostream &o = (path ? f : std::cout);
-  if (model->num_justice)
-    o << "1\nj0\n";
-  else
-    o << "1\nb0\n";
-  expand(o, cex[0], model->latches, model->num_inputs + model->num_latches);
+  if (!property) property = model->num_justice ? 'j' : 'b';
+  o << "1\n" << property << index << "\n";
+  expand(o, cex[0], model->latches, model->num_latches);
   o << "\n";
   for (unsigned i = 1; i < cex.size(); ++i) {
     expand(o, cex[i], model->inputs, model->num_inputs);

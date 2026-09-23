@@ -75,9 +75,15 @@ class BackwardEncoding {
   }
 
   int new_var() {
-    const int res = next_var++;
-    ensure_declared(res);
-    return res;
+    if (next_var > declared_vars) {
+      // Solving can allocate extension variables between our reserved batches.
+      // Use the range returned by CaDiCaL instead of assuming it is contiguous
+      // with the previous batch.
+      constexpr int batch_size = 128;
+      declared_vars = solver.declare_more_variables(batch_size);
+      next_var = declared_vars - batch_size + 1;
+    }
+    return next_var++;
   }
 
   int lit(unsigned t, unsigned aig_lit) const {
@@ -705,8 +711,9 @@ bool backward(aiger *model, std::vector<std::vector<unsigned>> &cex,
       L1 << "backward proved safety";
       if (backward.has_learned_cubes())
         backward.install_strengthened_property();
-      else
-        witness = build_k_induction_witness(model, k);
+      // The final query proves k-inductiveness, even after learning cubes.
+      // Turn the strengthened property into a one-step inductive certificate.
+      witness = build_k_induction_witness(model, k);
       backward.print_stats();
       return false;
     }

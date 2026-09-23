@@ -1,4 +1,5 @@
 #include "aiger.hpp"
+#include "ic3.hpp"
 #include "mcaiger.hpp"
 #include "utils.hpp"
 
@@ -896,6 +897,13 @@ void unique_witness(int kin, aiger *&witness) {
 
 aiger *build_k_induction_witness(aiger *aig, unsigned depth) {
   model = aig;
+  if (depth >= 2 && model->num_constraints) {
+    L0 << "Constructing constrained k-induction invariant with IC3\n";
+    std::vector<std::vector<unsigned>> cex;
+    if (ic3(model, cex))
+      die("k-induction certificate construction found a counterexample");
+    return model;
+  }
   aiger *res{};
   unique_witness(depth, res);
   return res;
@@ -909,7 +917,23 @@ bool kind(aiger *aig, aiger *&k_witness_model,
   model = aig;
   if (bug)
     stimulus(k, cex);
-  else if (simple_path || always_unique)
+  else if (k >= 2 &&
+           (model->num_constraints ||
+            (!(simple_path || always_unique) &&
+             std::any_of(latches(model).begin(), latches(model).end(),
+                         [](const auto &l) {
+                           return l.reset > 1 && l.reset != l.lit;
+                         })))) {
+    // The history certificate cannot encode functional resets, and the
+    // look-ahead certificate omits constraints on future oracle inputs.
+    // Keep the selected induction search and construct its invariant with
+    // IC3 when those certificate formats cannot represent this model.
+    mcaiger_free();
+    L0 << "Constructing k-induction invariant with IC3\n";
+    const bool reachable = ic3(model, cex);
+    if (!reachable) k_witness_model = model;
+    return reachable;
+  } else if (simple_path || always_unique)
     unique_witness(k, k_witness_model);
   else
     witness(k, k_witness_model);

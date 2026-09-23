@@ -8,6 +8,8 @@
 #include "l2s.hpp"
 #include "options.hpp"
 #include "rlive.hpp"
+#include "safety.hpp"
+#include "general.hpp"
 
 #include "utils.hpp"
 
@@ -21,8 +23,14 @@ int main(int argc, char *argv[]) {
   std::vector<std::vector<unsigned>> cex;
   bool bug;
   aiger *witness{};
+  unsigned property_index = 0;
+  bool is_justice = (*model)->num_justice;
 
-  if ((*model)->num_justice) {
+  if ((*model)->num_justice &&
+      ((*model)->num_justice != 1 || (*model)->justice[0].size != 1 ||
+       (*model)->num_fairness || (*model)->num_bad)) {
+    bug = general_liveness(*model, witness, cex, property_index, is_justice);
+  } else if ((*model)->num_justice) {
     if (options.liveness == 0)
       bug = k_liveness(*model, witness, cex, options.stabilize);
     else if (options.liveness == 1)
@@ -31,18 +39,13 @@ int main(int argc, char *argv[]) {
       bug = rlive(*model, witness, cex);
     else
       die("invalid '--liveness=%u' (expected 0..2)", options.liveness);
-  } else if (options.safety == 0)
-    bug = ic3(*model, cex);
-  else if (options.safety == 1)
-    bug = kind(*model, witness, cex, options.paths, options.unique);
-  else if (options.safety == 2)
-    bug = backward(*model, cex, witness, options.backward_depth,
-                   options.backward_flipping, options.backward_simulation);
-  else
-    die("invalid '--safety=%u' (expected 0..2)", options.safety);
+  } else
+    bug = solve_safety(*model, options, witness, cex, property_index);
 
   if (bug) {
-    if (options.trace) write_witness(*model, cex, options.witness_sat);
+    if (options.trace)
+      write_witness(*model, cex, options.witness_sat,
+                    is_justice ? 'j' : 'b', property_index);
     std::cout << "sat\n";
   } else {
     if (options.certificate) {

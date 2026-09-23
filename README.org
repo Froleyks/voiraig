@@ -7,3 +7,47 @@ git clone https://github.com/Froleyks/voiraig
 make -C voiraig
 ./voiraig/bin/voiraig
 #+end_src
+
+** Unrestricted certified fuzzing
+
+Run =make fuzz-check= to build the current certifaiger setup and require 10,000
+circuits to pass certificate checking or trace simulation. =FUZZ_COUNT= and
+=FUZZ_JOBS= override the default target and eight workers. The equivalent
+commands, with additional runner options available, are:
+
+#+begin_src sh
+cmake -DCMAKE_BUILD_TYPE=Fuzzing -B fuzz -DCHECK=ON
+cmake --build fuzz --parallel
+cmake --install fuzz --prefix fuzz
+python3 scripts/fuzz.py --count 10000 --jobs 8
+#+end_src
+
+The runner uses =aigfuzz -2 -f= to enable extended AIGER properties and reset
+functions. It applies no flags that merge properties, remove safety or liveness
+signals, restrict latch initialization, or restrict circuit sizes. It also
+randomizes the model checker's options using its =--range= output, as the
+interactive =certifuzzer= does.
+
+Multiple safety properties are checked together. Generalized liveness uses
+acceptance monitors that retain every justice and fairness signal in the
+certificate. The same monitor handles functional resets when =rlive= is
+selected, since its trace stitching assumes input-independent resets. For
+constrained models, induction searches use IC3 to construct certificates when
+the existing history or look-ahead certificate cannot represent the model.
+
+Every attempt has a consecutive deterministic seed. The output directory
+(=fuzz/runs/<timestamp>= by default, or =--output PATH=) contains the generator
+options, binary hashes, a =results.jsonl= ledger, per-seed check logs, and a
+=summary.json= with feature counts for both generated and certified circuits.
+The manifest records hashes of every installed tool, the effective checker
+environment, generator help and settings, and both full and filtered option
+ranges. Models and any generated traces or witnesses that fail or time out are
+retained; successful artifacts are removed and their models can be regenerated
+using the recorded seed and options. Timeouts and memory exhaustion do not count
+toward 10,000. The runner stops on the first certification failure and exits
+nonzero. Use =--seed N= to select a different starting seed and =--time-limit N=
+to change the per-stage time limit (60 seconds by default).
+
+The interactive =make fuzz= target runs continuously. Its upstream status
+counter includes model-checker timeouts, so use the bounded runner's certified
+count when checking a completion target.

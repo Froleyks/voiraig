@@ -80,9 +80,18 @@ void cex_construction(aiger *model, std::vector<std::vector<unsigned>> &cex) {
   for (auto x : cex) {
     L5 << x;
   }
-  cex[0].resize(model->num_latches);
-  for (auto &i : cex | std::views::drop(1))
-    i.resize(model->num_inputs);
+  // Adding the store input shifts every original latch by one variable.
+  // IC3 cubes can be sparse, so project by literal rather than cube position.
+  std::erase_if(cex[0], [model](unsigned literal) {
+    return literal < 2 || literal - 2 >= size(model) ||
+           !aiger_is_latch(model, aiger_strip(literal - 2));
+  });
+  for (unsigned &literal : cex[0]) literal -= 2;
+  for (auto &cube : cex | std::views::drop(1))
+    std::erase_if(cube, [model](unsigned literal) {
+      return literal >= size(model) ||
+             !aiger_is_input(model, aiger_strip(literal));
+    });
 }
 
 aiger *witness_construction(aiger *model, aiger *safety,
