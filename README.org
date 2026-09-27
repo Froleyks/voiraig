@@ -29,9 +29,7 @@ randomizes the model checker's options using its =--range= output, as the
 interactive =certifuzzer= does.
 
 Multiple safety properties are checked together. Generalized liveness uses
-acceptance monitors that retain every justice and fairness signal in the
-certificate. The same monitor handles functional resets when =rlive= is
-selected, since its trace stitching assumes input-independent resets. For
+the selected engine with acceptance monitors as described below. For
 constrained models, induction searches use IC3 to construct certificates when
 the existing history or look-ahead certificate cannot represent the model.
 
@@ -51,3 +49,56 @@ to change the per-stage time limit (60 seconds by default).
 The interactive =make fuzz= target runs continuously. Its upstream status
 counter includes model-checker timeouts, so use the bounded runner's certified
 count when checking a completion target.
+
+** Generalized liveness algorithms
+
+For multiple justice properties, multi-signal justice vectors, or fairness
+signals, =--liveness=0= selects k-liveness, =--liveness=1= selects L2S, and
+=--liveness=2= selects RLIVE. Both =--stabilize=true= and =--stabilize=false=
+are supported for k-liveness. Safety-only inputs continue to use =--safety=0=
+(IC3) or =--safety=1= (k-induction).
+
+Each justice group gets a cyclic monitor over its signals and all fairness
+signals. The disjunction of completed rounds is a single acceptance signal
+for the selected search engine. Functional resets are represented by
+nondeterministic initial latches and initial-only equality constraints, so
+generalized RLIVE searches do not fall back to the acceptance-budget engine.
+Mixed safety/liveness inputs first run the selected safety search.
+
+SAT traces are projected to the original inputs and latches, then completed
+by SAT solving against the original reset, transitions, constraints and an
+accepting loop for a particular original justice property. A failed completion
+is an error; acceptance must include every fairness and selected justice signal.
+
+Original-format UNSAT certificates use the shared acceptance-budget IC3 backend
+after the selected search finishes. These are not engine-native generalized
+rankings: a single normalized ranking signal cannot simply be duplicated into
+all original property positions. A disagreement between the selected search
+and the certificate backend is an error. The caller's time limit covers both
+stages. With =--certificate=false=, original-certificate construction is skipped.
+
+Logs identify =search-engine=, =search-result=, =search-seconds=,
+=certificate-backend= and =certificate-seconds=. If an UNSAT output filename
+is supplied, the exact normalized model and the native engine's certificate
+or trace are saved next to it with =.search-model.aig=,
+=.search-certificate.aig= and =.search-trace.sat= suffixes. The =--trace= and
+=--certificate= switches also control these native witnesses; disabling both
+suppresses the normalized model too. These native
+certificates need an independent check against the normalized model, separately
+from checking the final certificate against the original model. A native UNSAT
+search followed by a certification timeout has no completed original certificate.
+
+Run =make verify-generalized= for the deterministic 800-case trace-completion
+oracle and the generalized liveness/safety fixture matrix. The tests need
+Python 3 and the compiled solver. To also check all nine CNF obligations of
+each original and normalized UNSAT certificate, provide a directory containing
+=certifaiger=, =aigsplit=, =aigtocnf= and =cadical=:
+
+#+begin_src sh
+make verify-generalized GENERALIZED_TOOLS=/path/to/checker/bin
+#+end_src
+
+These optional checks establish UNSAT with CaDiCaL; they do not themselves
+validate an LRAT proof. =GENERALIZED_SECONDS= sets the per-command test limit
+(10 seconds by default). Test sources are under =checks/generalized/= and do
+not depend on the benchmark experiment checkout.

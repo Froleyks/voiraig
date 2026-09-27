@@ -126,6 +126,9 @@ void parse_options(int argc, char **argv, struct options *opts) {
   for (int i = 1; i != argc; i++) {
     const char *opt = argv[i], *arg;
     if (!strcmp(opt, "-h") || !strcmp(opt, "--help")) {
+      printf("Capabilities: generalized-liveness-algorithms\n"
+             "Generalized search uses the selected engine; original-property\n"
+             "certificates use a shared acceptance-budget IC3 backend.\n");
       printf("\nOptions:\n");
       print_usage_of_generic_options();
       printf("\n");

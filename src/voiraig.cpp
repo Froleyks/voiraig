@@ -9,7 +9,7 @@
 #include "options.hpp"
 #include "rlive.hpp"
 #include "safety.hpp"
-#include "general.hpp"
+#include "generalized.hpp"
 
 #include "utils.hpp"
 
@@ -29,7 +29,8 @@ int main(int argc, char *argv[]) {
   if ((*model)->num_justice &&
       ((*model)->num_justice != 1 || (*model)->justice[0].size != 1 ||
        (*model)->num_fairness || (*model)->num_bad)) {
-    bug = general_liveness(*model, witness, cex, property_index, is_justice);
+    bug = generalized_search(*model, options, witness, cex, property_index,
+                             is_justice);
   } else if ((*model)->num_justice) {
     if (options.liveness == 0)
       bug = k_liveness(*model, witness, cex, options.stabilize);

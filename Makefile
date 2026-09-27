@@ -1,9 +1,15 @@
 MAKEFLAGS += --no-print-directory
 FUZZ_COUNT ?= 10000
 FUZZ_JOBS ?= 8
+GENERALIZED_TOOLS ?=
+GENERALIZED_SECONDS ?= 10
 all: build/Makefile
 	@cmake --build build --parallel
 	@cmake --install build --prefix .
+verify-generalized: all
+	@cmake --build build --target verify-liveness-trace --parallel
+	./build/verify-liveness-trace
+	python3 checks/generalized/verify.py --binary bin/voiraig --seconds $(GENERALIZED_SECONDS) $(if $(GENERALIZED_TOOLS),--tools-dir "$(GENERALIZED_TOOLS)")
 tools: tools/Makefile
 	@cmake --build tools --parallel
 	@cmake --install tools --prefix .
@@ -33,4 +39,4 @@ docker: clean
 	docker run --rm -it voiraig
 clean:
 	rm -rf build bin tools fuzz debug compile_commands.json
-.PHONY: all fuzz fuzz-check clean docker debug
+.PHONY: all tools fuzz fuzz-check clean docker debug verify-generalized

@@ -35,3 +35,10 @@ endif()
 
 target_link_libraries(voiraig aiger)
 target_link_libraries(voiraig cadical_lib)
+
+# A bounded, independent explicit-state oracle for sparse liveness traces.
+# Keep this test out of ordinary release builds and installation.
+add_executable(verify-liveness-trace EXCLUDE_FROM_ALL
+  src/complete_liveness.cpp checks/generalized/complete_liveness.cpp)
+target_include_directories(verify-liveness-trace PRIVATE src)
+target_link_libraries(verify-liveness-trace PRIVATE aiger cadical_lib)
