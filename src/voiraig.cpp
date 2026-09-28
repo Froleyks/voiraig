@@ -50,10 +50,7 @@ int main(int argc, char *argv[]) {
     std::cout << "sat\n";
   } else {
     if (options.certificate) {
-      if (witness)
-        write_witness(witness, options.witness_uns);
-      else
-        write_witness(*model, options.witness_uns);
+      write_witness(*model, witness ? witness : *model, options.witness_uns);
     }
     if (witness && witness != *model) aiger_reset(witness);
     std::cout << "unsat\n";

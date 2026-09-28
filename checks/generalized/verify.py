@@ -161,8 +161,20 @@ def read_model(path, workdir=None):
         literals.extend(lit for group in justice for lit in group)
         literals.extend(lit for gate in gates for lit in gate)
         assert all(0 <= lit <= 2 * maximum + 1 for lit in literals), "literal exceeds AIGER maximum"
+        symbols = {}
+        limits = dict(i=ni, l=nl, o=no, b=nb, c=nc, j=nj, f=nf)
+        for row in stream:
+            if row == b"c\n":
+                break
+            match = re.fullmatch(rb"([ilobcjf])(\d+) (.*)\n", row)
+            assert match, "invalid AIGER symbol entry"
+            kind, index, name = match.groups()
+            key = kind.decode(), int(index)
+            assert key[1] < limits[key[0]] and key not in symbols, "invalid AIGER symbol index"
+            symbols[key] = name.decode()
     return dict(maximum=maximum, inputs=inputs, latches=latches, outputs=outputs, bad=bad,
-                constraints=constraints, justice=justice, fairness=fairness, gates=gates)
+                constraints=constraints, justice=justice, fairness=fairness, gates=gates,
+                symbols=symbols)
 
 
 def check_trace(model, witness, workdir, aigsim=None):
@@ -222,10 +234,12 @@ def verify_trace_checker(workdir):
     # Exercise binary AND deltas and extended-property text before relying on
     # this independent reader for retained native search artifacts.
     ascii_model, binary_model = workdir / "reader.aag", workdir / "reader.aig"
-    ascii_model.write_text("aag 3 1 1 0 1 1 1 1 1\n2\n4 6 0\n6\n3\n2\n2\n4\n1\n6 4 2\n")
-    binary_model.write_bytes(b"aig 3 1 1 0 1 1 1 1 1\n6 0\n6\n3\n2\n2\n4\n1\n\x02\x02")
+    symbols = "i0 = 2\nl0 = 4 < 6\nc0 constraint\nc\nreader fixture\n"
+    ascii_model.write_text("aag 3 1 1 0 1 1 1 1 1\n2\n4 6 0\n6\n3\n2\n2\n4\n1\n6 4 2\n" + symbols)
+    binary_source = b"aig 3 1 1 0 1 1 1 1 1\n6 0\n6\n3\n2\n2\n4\n1\n\x02\x02"
+    binary_model.write_bytes(binary_source + symbols.encode())
     assert read_model(ascii_model) == read_model(binary_model), "binary AIGER reader mismatch"
-    binary_model.write_bytes(binary_model.read_bytes()[:-1])
+    binary_model.write_bytes(binary_source[:-1])
     try:
         read_model(binary_model)
     except AssertionError:

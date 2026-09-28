@@ -3,6 +3,7 @@
 #include <charconv>
 #include <cstring>
 #include <fstream>
+#include <string>
 
 #include "utils.hpp"
 
@@ -216,6 +217,43 @@ void write_witness(aiger *circuit, const char *path) {
     err = aiger_write_to_file(circuit, aiger_ascii_mode, stdout);
   if (!err) // the write proctions return zero on error...
     die("failed to write witness");
+}
+
+void write_witness(aiger *model, aiger *circuit, const char *path) {
+  auto has_mapping = [&](char marker) {
+    for (auto &symbol : inputs(circuit))
+      if (symbol.name && std::strchr(symbol.name, marker)) return true;
+    for (auto &symbol : latches(circuit))
+      if (symbol.name && std::strchr(symbol.name, marker)) return true;
+    return false;
+  };
+  // Explicit interventions (currently RLIVE) are already in final numbering.
+  // Stabilize all other circuits before putting witness literals in names:
+  // the binary AIGER writer reencodes gates, but does not rewrite symbol text.
+  assert(!has_mapping('<') || aiger_is_reencoded(circuit));
+  aiger_reencode(circuit);
+  auto annotate = [](aiger_symbol &symbol, char marker, unsigned literal) {
+    std::string name = symbol.name ? symbol.name : "";
+    if (!name.empty()) name += ' ';
+    name += marker;
+    name += ' ';
+    name += std::to_string(literal);
+    free(symbol.name);
+    symbol.name = strdup(name.c_str());
+    if (!symbol.name) die("failed to allocate witness mapping");
+  };
+  // Match Certifaiger's two independent defaults. Once an engine supplies
+  // either map, preserve that entire map rather than adding positional pairs.
+  if (!has_mapping('=')) {
+    for (unsigned i = 0; i < model->num_inputs && i < circuit->num_inputs; ++i)
+      annotate(circuit->inputs[i], '=', model->inputs[i].lit);
+    for (unsigned i = 0; i < model->num_latches && i < circuit->num_latches; ++i)
+      annotate(circuit->latches[i], '=', model->latches[i].lit);
+  }
+  if (!has_mapping('<'))
+    for (auto &l : latches(circuit))
+      if (!aiger_is_constant(l.next)) annotate(l, '<', l.next);
+  write_witness(circuit, path);
 }
 
 void expand(std::ostream &o, const std::vector<unsigned> &c,

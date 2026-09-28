@@ -158,8 +158,10 @@ bool generalized_search(aiger *model, const options &opts, aiger *&witness,
     aiger_reset(normalized);
     return true;
   }
-  if (opts.certificate)
-    artifact(native ? native : normalized, opts, ".search-certificate.aig");
+  if (opts.certificate && opts.witness_uns)
+    write_witness(normalized, native ? native : normalized,
+                  (std::string(opts.witness_uns) + ".search-certificate.aig")
+                      .c_str());
   if (native && native != normalized) aiger_reset(native);
   aiger_reset(normalized);
   if (!opts.certificate) return false;
